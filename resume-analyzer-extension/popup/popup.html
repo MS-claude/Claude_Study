@@ -14,19 +14,25 @@
         <span class="header-icon">📄</span>
         Resume Analyzer
       </h1>
-      <button id="settingsBtn" class="icon-btn" title="설정">⚙️</button>
+      <div class="header-actions">
+        <button id="settingsBtn" class="icon-btn" title="설정">⚙️</button>
+        <button id="closeBtn" class="icon-btn close-btn" title="닫기">✕</button>
+      </div>
     </header>
 
-    <!-- Settings Panel (hidden by default) -->
+    <!-- Settings Panel -->
     <div id="settingsPanel" class="panel hidden">
       <h2 class="panel-title">설정</h2>
       <div class="form-group">
-        <label for="apiKeyInput">Anthropic API Key</label>
+        <label for="apiKeyInput">Google AI API Key</label>
         <div class="input-row">
-          <input type="password" id="apiKeyInput" placeholder="sk-ant-..." class="input-field" />
+          <input type="password" id="apiKeyInput" placeholder="AIza..." class="input-field" />
           <button id="saveApiKeyBtn" class="btn btn-small btn-primary">저장</button>
         </div>
-        <span class="hint">Claude API 키를 입력하세요. 로컬에만 저장됩니다.</span>
+        <span class="hint">
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="link">Google AI Studio</a>
+          에서 무료 발급 가능합니다.
+        </span>
       </div>
       <button id="closeSettingsBtn" class="btn btn-secondary btn-full">닫기</button>
     </div>
@@ -45,7 +51,7 @@
           <label for="requirementSelect">요구사항 선택</label>
           <div class="select-row">
             <select id="requirementSelect" class="select-field">
-              <option value="">-- 선택 --</option>
+              <option value="">-- 선택하세요 --</option>
               <option value="__new__">+ 새 요구사항 추가</option>
             </select>
             <button id="deleteReqBtn" class="btn btn-small btn-danger hidden" title="삭제">🗑️</button>
@@ -86,11 +92,11 @@
         </div>
       </section>
 
-      <!-- Step 2: Capture -->
-      <section class="section" id="captureSection">
+      <!-- Step 2: Resume Input -->
+      <section class="section">
         <div class="section-header">
           <span class="step-badge">2</span>
-          <h2>이력서 분석</h2>
+          <h2>이력서 입력</h2>
         </div>
 
         <div class="capture-tabs">
@@ -100,19 +106,15 @@
         </div>
 
         <!-- Capture Tab -->
-        <div id="captureTab" class="tab-content active">
-          <p class="tab-desc">현재 화면을 캡처하여 이력서를 분석합니다. 스크롤하여 여러 영역을 캡처할 수 있습니다.</p>
+        <div id="captureTab" class="tab-content">
+          <p class="tab-desc">현재 화면을 캡처하여 이력서를 분석합니다.</p>
           <div class="capture-actions">
-            <button id="captureBtn" class="btn btn-capture">
-              📷 현재 화면 캡처
-            </button>
-            <button id="scrollCaptureBtn" class="btn btn-secondary">
-              📜 스크롤 캡처 (다중)
-            </button>
+            <button id="captureBtn" class="btn btn-capture">📷 현재 화면 캡처</button>
+            <button id="scrollCaptureBtn" class="btn btn-secondary btn-full">📜 스크롤 전체 캡처</button>
           </div>
           <div id="capturePreview" class="capture-preview hidden">
             <div class="preview-header">
-              <span>캡처된 이미지 (<span id="captureCount">0</span>장)</span>
+              <span>캡처 <span id="captureCount">0</span>장</span>
               <button id="clearCaptureBtn" class="btn btn-small btn-danger">지우기</button>
             </div>
             <div id="captureList" class="capture-list"></div>
@@ -121,10 +123,20 @@
 
         <!-- Selection Tab -->
         <div id="selectionTab" class="tab-content hidden">
-          <p class="tab-desc">페이지에서 분석할 텍스트를 드래그하여 선택한 후 아래 버튼을 클릭하세요.</p>
-          <button id="getSelectionBtn" class="btn btn-capture">
-            🖱️ 선택된 텍스트 가져오기
-          </button>
+          <p class="tab-desc">이력서 페이지에서 텍스트를 드래그 선택한 후 "선택 완료"를 누르세요.<br>사이드 패널은 선택하는 동안 유지됩니다.</p>
+
+          <div id="selectionIdle">
+            <button id="startSelectionBtn" class="btn btn-capture">🖱️ 선택 모드 시작</button>
+          </div>
+
+          <div id="selectionActive" class="selection-status hidden">
+            <div class="status-indicator active">
+              <span class="status-dot"></span>
+              페이지에서 텍스트를 드래그하여 선택하고 상단 툴바의 <strong>선택 완료</strong>를 클릭하세요
+            </div>
+            <button id="cancelSelectionBtn" class="btn btn-secondary btn-full">선택 모드 취소</button>
+          </div>
+
           <div id="selectionPreview" class="text-preview hidden">
             <div class="preview-header">
               <span>선택된 텍스트</span>
@@ -136,16 +148,22 @@
 
         <!-- Paste Tab -->
         <div id="pasteTab" class="tab-content hidden">
-          <p class="tab-desc">이력서 내용을 직접 붙여넣거나 입력하세요.</p>
-          <textarea id="pasteTextInput" class="textarea-field" rows="8" placeholder="이력서 내용을 여기에 붙여넣으세요..."></textarea>
+          <p class="tab-desc">이력서 내용을 복사(Ctrl+C)하여 아래에 붙여넣기(Ctrl+V) 하세요.</p>
+          <textarea
+            id="pasteTextInput"
+            class="textarea-field paste-area"
+            rows="10"
+            placeholder="이력서 내용을 여기에 붙여넣으세요 (Ctrl+V)..."></textarea>
+          <div class="paste-actions">
+            <button id="clearPasteBtn" class="btn btn-small btn-secondary">지우기</button>
+            <span id="pasteCharCount" class="char-count">0자</span>
+          </div>
         </div>
       </section>
 
       <!-- Analyze Button -->
       <div class="analyze-container" id="analyzeContainer">
-        <button id="analyzeBtn" class="btn btn-analyze" disabled>
-          🔍 분석 시작
-        </button>
+        <button id="analyzeBtn" class="btn btn-analyze" disabled>🔍 분석 시작</button>
         <div id="loadingSpinner" class="spinner hidden"></div>
       </div>
 
@@ -156,7 +174,6 @@
           <h2>분석 결과</h2>
         </div>
 
-        <!-- Probability Gauge -->
         <div class="probability-card">
           <div class="probability-label">서류 합격 예상 확률</div>
           <div class="probability-gauge">
@@ -168,13 +185,11 @@
           <div id="recommendationBadge" class="recommendation-badge"></div>
         </div>
 
-        <!-- Summary -->
         <div class="result-block">
           <h3>종합 평가</h3>
           <p id="resultSummary" class="result-text"></p>
         </div>
 
-        <!-- Strengths & Weaknesses -->
         <div class="result-columns">
           <div class="result-block">
             <h3>✅ 강점</h3>
@@ -186,16 +201,14 @@
           </div>
         </div>
 
-        <!-- Key Matches -->
         <div class="result-block">
           <h3>요구사항 매칭</h3>
           <div id="keyMatchesList" class="matches-list"></div>
         </div>
 
-        <!-- Feedback -->
         <div class="feedback-section">
           <h3>실제 결과 입력 (학습용)</h3>
-          <p class="hint">실제 서류 전형 결과가 나오면 입력해주세요. 다음 분석에 활용됩니다.</p>
+          <p class="hint">서류 결과가 나오면 입력해주세요. 다음 분석에 반영됩니다.</p>
           <div class="feedback-buttons">
             <button id="feedbackPassBtn" class="btn btn-feedback btn-pass">✓ 합격</button>
             <button id="feedbackFailBtn" class="btn btn-feedback btn-fail">✗ 불합격</button>
@@ -203,7 +216,6 @@
           <div id="feedbackConfirm" class="feedback-confirm hidden"></div>
         </div>
 
-        <!-- History Button -->
         <button id="viewHistoryBtn" class="btn btn-secondary btn-full">📊 분석 이력 보기</button>
       </section>
 
@@ -211,7 +223,7 @@
       <section class="section hidden" id="historySection">
         <div class="section-header">
           <h2>분석 이력</h2>
-          <button id="closeHistoryBtn" class="icon-btn">✕</button>
+          <button id="closeHistoryBtn" class="icon-btn icon-btn-dark">✕</button>
         </div>
         <div id="historyList" class="history-list"></div>
       </section>

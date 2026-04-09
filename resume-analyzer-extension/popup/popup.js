@@ -1,72 +1,14 @@
-// popup.js - Main popup controller
+// popup.js - Side panel controller
 
-// State
 const state = {
   requirements: [],
   selectedRequirement: null,
-  captures: [],       // Array of base64 images
+  captures: [],
   selectedText: '',
+  selectionModeActive: false,
   currentAnalysis: null,
   currentAnalysisId: null,
   activeTab: 'capture'
-};
-
-// DOM refs
-const els = {
-  settingsBtn: () => document.getElementById('settingsBtn'),
-  settingsPanel: () => document.getElementById('settingsPanel'),
-  mainContent: () => document.getElementById('mainContent'),
-  closeSettingsBtn: () => document.getElementById('closeSettingsBtn'),
-  apiKeyInput: () => document.getElementById('apiKeyInput'),
-  saveApiKeyBtn: () => document.getElementById('saveApiKeyBtn'),
-
-  requirementSelect: () => document.getElementById('requirementSelect'),
-  deleteReqBtn: () => document.getElementById('deleteReqBtn'),
-  newReqForm: () => document.getElementById('newReqForm'),
-  editReqForm: () => document.getElementById('editReqForm'),
-  reqNameInput: () => document.getElementById('reqNameInput'),
-  reqContentInput: () => document.getElementById('reqContentInput'),
-  saveNewReqBtn: () => document.getElementById('saveNewReqBtn'),
-  cancelNewReqBtn: () => document.getElementById('cancelNewReqBtn'),
-  editReqNameInput: () => document.getElementById('editReqNameInput'),
-  editReqContentInput: () => document.getElementById('editReqContentInput'),
-  saveEditReqBtn: () => document.getElementById('saveEditReqBtn'),
-  cancelEditReqBtn: () => document.getElementById('cancelEditReqBtn'),
-  reqStats: () => document.getElementById('reqStats'),
-
-  captureBtn: () => document.getElementById('captureBtn'),
-  scrollCaptureBtn: () => document.getElementById('scrollCaptureBtn'),
-  capturePreview: () => document.getElementById('capturePreview'),
-  captureCount: () => document.getElementById('captureCount'),
-  captureList: () => document.getElementById('captureList'),
-  clearCaptureBtn: () => document.getElementById('clearCaptureBtn'),
-
-  getSelectionBtn: () => document.getElementById('getSelectionBtn'),
-  selectionPreview: () => document.getElementById('selectionPreview'),
-  selectionText: () => document.getElementById('selectionText'),
-  clearSelectionBtn: () => document.getElementById('clearSelectionBtn'),
-  pasteTextInput: () => document.getElementById('pasteTextInput'),
-
-  analyzeBtn: () => document.getElementById('analyzeBtn'),
-  loadingSpinner: () => document.getElementById('loadingSpinner'),
-
-  resultsSection: () => document.getElementById('resultsSection'),
-  gaugeBar: () => document.getElementById('gaugeBar'),
-  probabilityValue: () => document.getElementById('probabilityValue'),
-  recommendationBadge: () => document.getElementById('recommendationBadge'),
-  resultSummary: () => document.getElementById('resultSummary'),
-  strengthsList: () => document.getElementById('strengthsList'),
-  weaknessesList: () => document.getElementById('weaknessesList'),
-  keyMatchesList: () => document.getElementById('keyMatchesList'),
-
-  feedbackPassBtn: () => document.getElementById('feedbackPassBtn'),
-  feedbackFailBtn: () => document.getElementById('feedbackFailBtn'),
-  feedbackConfirm: () => document.getElementById('feedbackConfirm'),
-
-  viewHistoryBtn: () => document.getElementById('viewHistoryBtn'),
-  historySection: () => document.getElementById('historySection'),
-  historyList: () => document.getElementById('historyList'),
-  closeHistoryBtn: () => document.getElementById('closeHistoryBtn')
 };
 
 // ─── Init ───────────────────────────────────────────────────────────────────
@@ -74,6 +16,7 @@ async function init() {
   await loadRequirements();
   await loadApiKey();
   bindEvents();
+  listenForMessages();
 }
 
 async function loadRequirements() {
@@ -83,14 +26,13 @@ async function loadRequirements() {
 
 async function loadApiKey() {
   const key = await getApiKey();
-  if (key) els.apiKeyInput().value = key;
+  if (key) document.getElementById('apiKeyInput').value = key;
 }
 
 function renderRequirementDropdown() {
-  const select = els.requirementSelect();
+  const select = document.getElementById('requirementSelect');
   const currentVal = select.value;
 
-  // Clear options except defaults
   while (select.options.length > 2) select.remove(2);
 
   state.requirements.forEach(req => {
@@ -103,25 +45,45 @@ function renderRequirementDropdown() {
   if (currentVal) select.value = currentVal;
 }
 
-// ─── Event Binding ───────────────────────────────────────────────────────────
+// ─── Listen for content script messages ──────────────────────────────────────
+function listenForMessages() {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'TEXT_SELECTED') {
+      state.selectedText = msg.text;
+      state.selectionModeActive = false;
+      showSelectionResult(msg.text);
+    } else if (msg.type === 'SELECTION_CANCELLED') {
+      state.selectionModeActive = false;
+      document.getElementById('selectionActive').classList.add('hidden');
+      document.getElementById('selectionIdle').classList.remove('hidden');
+    }
+  });
+}
+
+// ─── Event Binding ────────────────────────────────────────────────────────────
 function bindEvents() {
+  // Header
+  document.getElementById('settingsBtn').addEventListener('click', () => toggleSettings(true));
+  document.getElementById('closeBtn').addEventListener('click', handleClose);
+
   // Settings
-  els.settingsBtn().addEventListener('click', () => toggleSettings(true));
-  els.closeSettingsBtn().addEventListener('click', () => toggleSettings(false));
-  els.saveApiKeyBtn().addEventListener('click', handleSaveApiKey);
+  document.getElementById('closeSettingsBtn').addEventListener('click', () => toggleSettings(false));
+  document.getElementById('saveApiKeyBtn').addEventListener('click', handleSaveApiKey);
 
   // Requirements
-  els.requirementSelect().addEventListener('change', handleRequirementSelect);
-  els.saveNewReqBtn().addEventListener('click', handleSaveNewRequirement);
-  els.cancelNewReqBtn().addEventListener('click', () => {
-    els.newReqForm().classList.add('hidden');
-    els.requirementSelect().value = '';
+  document.getElementById('requirementSelect').addEventListener('change', handleRequirementSelect);
+  document.getElementById('saveNewReqBtn').addEventListener('click', handleSaveNewRequirement);
+  document.getElementById('cancelNewReqBtn').addEventListener('click', () => {
+    document.getElementById('newReqForm').classList.add('hidden');
+    document.getElementById('requirementSelect').value = '';
+    state.selectedRequirement = null;
+    updateAnalyzeButton();
   });
-  els.saveEditReqBtn().addEventListener('click', handleSaveEditRequirement);
-  els.cancelEditReqBtn().addEventListener('click', () => {
-    els.editReqForm().classList.add('hidden');
+  document.getElementById('saveEditReqBtn').addEventListener('click', handleSaveEditRequirement);
+  document.getElementById('cancelEditReqBtn').addEventListener('click', () => {
+    document.getElementById('editReqForm').classList.add('hidden');
   });
-  els.deleteReqBtn().addEventListener('click', handleDeleteRequirement);
+  document.getElementById('deleteReqBtn').addEventListener('click', handleDeleteRequirement);
 
   // Tabs
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -129,64 +91,80 @@ function bindEvents() {
   });
 
   // Capture
-  els.captureBtn().addEventListener('click', handleCapture);
-  els.scrollCaptureBtn().addEventListener('click', handleScrollCapture);
-  els.clearCaptureBtn().addEventListener('click', clearCaptures);
+  document.getElementById('captureBtn').addEventListener('click', handleCapture);
+  document.getElementById('scrollCaptureBtn').addEventListener('click', handleScrollCapture);
+  document.getElementById('clearCaptureBtn').addEventListener('click', clearCaptures);
 
   // Selection
-  els.getSelectionBtn().addEventListener('click', handleGetSelection);
-  els.clearSelectionBtn().addEventListener('click', clearSelection);
+  document.getElementById('startSelectionBtn').addEventListener('click', handleStartSelection);
+  document.getElementById('cancelSelectionBtn').addEventListener('click', handleCancelSelection);
+  document.getElementById('clearSelectionBtn').addEventListener('click', clearSelection);
 
   // Paste
-  els.pasteTextInput().addEventListener('input', updateAnalyzeButton);
+  document.getElementById('pasteTextInput').addEventListener('input', (e) => {
+    document.getElementById('pasteCharCount').textContent = e.target.value.length + '자';
+    updateAnalyzeButton();
+  });
+  document.getElementById('clearPasteBtn').addEventListener('click', () => {
+    document.getElementById('pasteTextInput').value = '';
+    document.getElementById('pasteCharCount').textContent = '0자';
+    updateAnalyzeButton();
+  });
 
   // Analyze
-  els.analyzeBtn().addEventListener('click', handleAnalyze);
+  document.getElementById('analyzeBtn').addEventListener('click', handleAnalyze);
 
   // Feedback
-  els.feedbackPassBtn().addEventListener('click', () => handleFeedback('pass'));
-  els.feedbackFailBtn().addEventListener('click', () => handleFeedback('fail'));
+  document.getElementById('feedbackPassBtn').addEventListener('click', () => handleFeedback('pass'));
+  document.getElementById('feedbackFailBtn').addEventListener('click', () => handleFeedback('fail'));
 
   // History
-  els.viewHistoryBtn().addEventListener('click', showHistory);
-  els.closeHistoryBtn().addEventListener('click', () => {
-    els.historySection().classList.add('hidden');
-    els.resultsSection().classList.remove('hidden');
+  document.getElementById('viewHistoryBtn').addEventListener('click', showHistory);
+  document.getElementById('closeHistoryBtn').addEventListener('click', () => {
+    document.getElementById('historySection').classList.add('hidden');
+    document.getElementById('resultsSection').classList.remove('hidden');
   });
 }
 
-// ─── Settings ────────────────────────────────────────────────────────────────
+// ─── Header ───────────────────────────────────────────────────────────────────
+function handleClose() {
+  // Cancel any active selection mode first
+  if (state.selectionModeActive) handleCancelSelection();
+  window.close();
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
 function toggleSettings(show) {
-  els.settingsPanel().classList.toggle('hidden', !show);
+  document.getElementById('settingsPanel').classList.toggle('hidden', !show);
 }
 
 async function handleSaveApiKey() {
-  const key = els.apiKeyInput().value.trim();
-  if (!key) return showMessage(els.settingsPanel(), 'API 키를 입력하세요.', 'error');
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) return showMessage(document.getElementById('settingsPanel'), 'API 키를 입력하세요.', 'error');
   await saveApiKey(key);
-  showMessage(els.settingsPanel(), 'API 키가 저장되었습니다.', 'success');
+  showMessage(document.getElementById('settingsPanel'), 'API 키가 저장되었습니다.', 'success');
   setTimeout(() => toggleSettings(false), 1000);
 }
 
-// ─── Requirements ────────────────────────────────────────────────────────────
+// ─── Requirements ─────────────────────────────────────────────────────────────
 function handleRequirementSelect() {
-  const val = els.requirementSelect().value;
-  els.newReqForm().classList.add('hidden');
-  els.editReqForm().classList.add('hidden');
-  els.deleteReqBtn().classList.add('hidden');
+  const val = document.getElementById('requirementSelect').value;
+  document.getElementById('newReqForm').classList.add('hidden');
+  document.getElementById('editReqForm').classList.add('hidden');
+  document.getElementById('deleteReqBtn').classList.add('hidden');
 
   if (val === '__new__') {
-    els.newReqForm().classList.remove('hidden');
-    els.reqNameInput().focus();
+    document.getElementById('newReqForm').classList.remove('hidden');
+    document.getElementById('reqNameInput').focus();
     state.selectedRequirement = null;
   } else if (val) {
     const req = state.requirements.find(r => r.id === val);
     if (req) {
       state.selectedRequirement = req;
-      els.editReqNameInput().value = req.name;
-      els.editReqContentInput().value = req.content;
-      els.editReqForm().classList.remove('hidden');
-      els.deleteReqBtn().classList.remove('hidden');
+      document.getElementById('editReqNameInput').value = req.name;
+      document.getElementById('editReqContentInput').value = req.content;
+      document.getElementById('editReqForm').classList.remove('hidden');
+      document.getElementById('deleteReqBtn').classList.remove('hidden');
       renderReqStats(req);
     }
   } else {
@@ -197,45 +175,45 @@ function handleRequirementSelect() {
 
 function renderReqStats(req) {
   const history = req.analysisHistory || [];
-  const total = history.length;
   const pass = history.filter(h => h.feedback === 'pass').length;
   const fail = history.filter(h => h.feedback === 'fail').length;
-  els.reqStats().textContent = `분석 ${total}건 | 합격 ${pass}건 | 불합격 ${fail}건`;
+  document.getElementById('reqStats').textContent =
+    `분석 ${history.length}건 · 합격 ${pass}건 · 불합격 ${fail}건`;
 }
 
 async function handleSaveNewRequirement() {
-  const name = els.reqNameInput().value.trim();
-  const content = els.reqContentInput().value.trim();
-  if (!name || !content) return showMessage(els.newReqForm(), '포지션명과 요구사항을 모두 입력하세요.', 'error');
+  const name = document.getElementById('reqNameInput').value.trim();
+  const content = document.getElementById('reqContentInput').value.trim();
+  if (!name || !content) return showMessage(document.getElementById('newReqForm'), '포지션명과 요구사항을 모두 입력하세요.', 'error');
 
   const saved = await saveRequirement({ name, content });
   state.requirements.push(saved);
   renderRequirementDropdown();
 
-  els.requirementSelect().value = saved.id;
+  document.getElementById('requirementSelect').value = saved.id;
   state.selectedRequirement = saved;
-  els.newReqForm().classList.add('hidden');
-  els.editReqNameInput().value = name;
-  els.editReqContentInput().value = content;
-  els.editReqForm().classList.remove('hidden');
-  els.deleteReqBtn().classList.remove('hidden');
+  document.getElementById('newReqForm').classList.add('hidden');
+  document.getElementById('editReqNameInput').value = name;
+  document.getElementById('editReqContentInput').value = content;
+  document.getElementById('editReqForm').classList.remove('hidden');
+  document.getElementById('deleteReqBtn').classList.remove('hidden');
   renderReqStats(saved);
   updateAnalyzeButton();
 }
 
 async function handleSaveEditRequirement() {
   if (!state.selectedRequirement) return;
-  const name = els.editReqNameInput().value.trim();
-  const content = els.editReqContentInput().value.trim();
-  if (!name || !content) return showMessage(els.editReqForm(), '포지션명과 요구사항을 모두 입력하세요.', 'error');
+  const name = document.getElementById('editReqNameInput').value.trim();
+  const content = document.getElementById('editReqContentInput').value.trim();
+  if (!name || !content) return showMessage(document.getElementById('editReqForm'), '포지션명과 요구사항을 모두 입력하세요.', 'error');
 
   const updated = await updateRequirement(state.selectedRequirement.id, { name, content });
   const index = state.requirements.findIndex(r => r.id === updated.id);
   if (index !== -1) state.requirements[index] = updated;
   state.selectedRequirement = updated;
   renderRequirementDropdown();
-  els.requirementSelect().value = updated.id;
-  showMessage(els.editReqForm(), '저장되었습니다.', 'success');
+  document.getElementById('requirementSelect').value = updated.id;
+  showMessage(document.getElementById('editReqForm'), '저장되었습니다.', 'success');
 }
 
 async function handleDeleteRequirement() {
@@ -246,25 +224,36 @@ async function handleDeleteRequirement() {
   state.requirements = state.requirements.filter(r => r.id !== state.selectedRequirement.id);
   state.selectedRequirement = null;
   renderRequirementDropdown();
-  els.requirementSelect().value = '';
-  els.editReqForm().classList.add('hidden');
-  els.deleteReqBtn().classList.add('hidden');
+  document.getElementById('requirementSelect').value = '';
+  document.getElementById('editReqForm').classList.add('hidden');
+  document.getElementById('deleteReqBtn').classList.add('hidden');
   updateAnalyzeButton();
 }
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
+  // Cancel selection mode if switching away
+  if (state.activeTab === 'selection' && tab !== 'selection' && state.selectionModeActive) {
+    handleCancelSelection();
+  }
+
   state.activeTab = tab;
+
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
+
+  // Toggle both active and hidden properly (hidden has !important so must be removed)
   document.querySelectorAll('.tab-content').forEach(content => {
-    content.classList.toggle('active', content.id === tab + 'Tab');
+    const isActive = content.id === tab + 'Tab';
+    content.classList.toggle('active', isActive);
+    content.classList.toggle('hidden', !isActive);
   });
+
   updateAnalyzeButton();
 }
 
-// ─── Capture ─────────────────────────────────────────────────────────────────
+// ─── Capture ──────────────────────────────────────────────────────────────────
 async function handleCapture() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -279,7 +268,6 @@ async function handleScrollCapture() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    // Get page dimensions
     const [{ result: dims }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => ({
@@ -289,21 +277,19 @@ async function handleScrollCapture() {
       })
     });
 
-    const screenshots = [];
-    let scrollPos = 0;
-
-    // Scroll to top first
+    // Scroll to top
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => window.scrollTo(0, 0)
     });
-    await sleep(300);
+    await sleep(400);
 
-    while (scrollPos <= dims.scrollHeight) {
+    let scrollPos = 0;
+    while (true) {
       const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
-      screenshots.push(dataUrl);
+      addCapture(dataUrl);
 
-      scrollPos += dims.clientHeight;
+      scrollPos += dims.clientHeight * 0.85; // 15% overlap for continuity
       if (scrollPos >= dims.scrollHeight) break;
 
       await chrome.scripting.executeScript({
@@ -314,14 +300,12 @@ async function handleScrollCapture() {
       await sleep(500);
     }
 
-    // Restore scroll position
+    // Restore scroll
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: (pos) => window.scrollTo(0, pos),
       args: [dims.scrollTop]
     });
-
-    screenshots.forEach(s => addCapture(s));
   } catch (e) {
     showMessage(document.getElementById('captureTab'), '스크롤 캡처 실패: ' + e.message, 'error');
   }
@@ -329,71 +313,84 @@ async function handleScrollCapture() {
 
 function addCapture(dataUrl) {
   state.captures.push(dataUrl);
-  els.captureCount().textContent = state.captures.length;
+  document.getElementById('captureCount').textContent = state.captures.length;
 
   const img = document.createElement('img');
   img.src = dataUrl;
   img.className = 'capture-thumb';
-  els.captureList().appendChild(img);
-
-  els.capturePreview().classList.remove('hidden');
+  document.getElementById('captureList').appendChild(img);
+  document.getElementById('capturePreview').classList.remove('hidden');
   updateAnalyzeButton();
 }
 
 function clearCaptures() {
   state.captures = [];
-  els.captureList().innerHTML = '';
-  els.captureCount().textContent = '0';
-  els.capturePreview().classList.add('hidden');
+  document.getElementById('captureList').innerHTML = '';
+  document.getElementById('captureCount').textContent = '0';
+  document.getElementById('capturePreview').classList.add('hidden');
   updateAnalyzeButton();
 }
 
 // ─── Selection ────────────────────────────────────────────────────────────────
-async function handleGetSelection() {
+async function handleStartSelection() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const [{ result: text }] = await chrome.scripting.executeScript({
+    await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => window.getSelection().toString().trim()
-    });
+      files: ['content/content.js']
+    }).catch(() => {}); // already injected is fine
 
-    if (!text) {
-      showMessage(document.getElementById('selectionTab'), '선택된 텍스트가 없습니다. 페이지에서 텍스트를 드래그하여 선택하세요.', 'error');
-      return;
-    }
+    await chrome.tabs.sendMessage(tab.id, { type: 'ENABLE_SELECTION_MODE' });
 
-    state.selectedText = text;
-    els.selectionText().textContent = text;
-    els.selectionPreview().classList.remove('hidden');
-    updateAnalyzeButton();
+    state.selectionModeActive = true;
+    document.getElementById('selectionIdle').classList.add('hidden');
+    document.getElementById('selectionActive').classList.remove('hidden');
+    document.getElementById('selectionPreview').classList.add('hidden');
   } catch (e) {
-    showMessage(document.getElementById('selectionTab'), '텍스트 가져오기 실패: ' + e.message, 'error');
+    showMessage(document.getElementById('selectionTab'), '선택 모드 시작 실패: ' + e.message, 'error');
   }
+}
+
+async function handleCancelSelection() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await chrome.tabs.sendMessage(tab.id, { type: 'DISABLE_SELECTION_MODE' }).catch(() => {});
+  } catch {}
+  state.selectionModeActive = false;
+  document.getElementById('selectionActive').classList.add('hidden');
+  document.getElementById('selectionIdle').classList.remove('hidden');
+}
+
+function showSelectionResult(text) {
+  document.getElementById('selectionActive').classList.add('hidden');
+  document.getElementById('selectionIdle').classList.remove('hidden');
+  document.getElementById('selectionText').textContent = text;
+  document.getElementById('selectionPreview').classList.remove('hidden');
+  updateAnalyzeButton();
 }
 
 function clearSelection() {
   state.selectedText = '';
-  els.selectionText().textContent = '';
-  els.selectionPreview().classList.add('hidden');
+  document.getElementById('selectionText').textContent = '';
+  document.getElementById('selectionPreview').classList.add('hidden');
   updateAnalyzeButton();
 }
 
 // ─── Analyze ──────────────────────────────────────────────────────────────────
 function updateAnalyzeButton() {
   const hasReq = !!state.selectedRequirement;
-  const hasContent = (
+  const hasContent =
     (state.activeTab === 'capture' && state.captures.length > 0) ||
     (state.activeTab === 'selection' && state.selectedText) ||
-    (state.activeTab === 'paste' && els.pasteTextInput().value.trim())
-  );
-  els.analyzeBtn().disabled = !(hasReq && hasContent);
+    (state.activeTab === 'paste' && document.getElementById('pasteTextInput').value.trim());
+
+  document.getElementById('analyzeBtn').disabled = !(hasReq && hasContent);
 }
 
 async function handleAnalyze() {
   const apiKey = await getApiKey();
   if (!apiKey) {
-    showMessage(document.getElementById('analyzeContainer'), 'API 키를 먼저 설정하세요.', 'error');
-    toggleSettings(true);
+    showMessage(document.getElementById('analyzeContainer'), 'API 키를 먼저 설정하세요. (⚙️ 설정)', 'error');
     return;
   }
 
@@ -403,16 +400,15 @@ async function handleAnalyze() {
     let result;
     let resumeText = '';
 
-    if (state.activeTab === 'capture' && state.captures.length > 0) {
-      // Use first capture for now; could merge multiple
-      const base64 = state.captures[0].split(',')[1];
-      result = await analyzeResumeFromImage(apiKey, state.selectedRequirement, base64);
-      resumeText = result.extractedText || '[이미지에서 추출]';
+    if (state.activeTab === 'capture') {
+      const base64Images = state.captures.map(d => d.split(',')[1]);
+      result = await analyzeResumeFromImage(apiKey, state.selectedRequirement, base64Images);
+      resumeText = result.extractedText || '[이미지 캡처]';
     } else if (state.activeTab === 'selection') {
       resumeText = state.selectedText;
       result = await analyzeResume(apiKey, state.selectedRequirement, resumeText);
     } else {
-      resumeText = els.pasteTextInput().value.trim();
+      resumeText = document.getElementById('pasteTextInput').value.trim();
       result = await analyzeResume(apiKey, state.selectedRequirement, resumeText);
     }
 
@@ -426,19 +422,15 @@ async function handleAnalyze() {
       captureMethod: state.activeTab
     });
 
-    // Update local state
-    const reqIndex = state.requirements.findIndex(r => r.id === state.selectedRequirement.id);
-    if (reqIndex !== -1) {
-      state.requirements[reqIndex] = await getRequirements().then(reqs =>
-        reqs.find(r => r.id === state.selectedRequirement.id)
-      );
-      state.selectedRequirement = state.requirements[reqIndex];
-      renderReqStats(state.selectedRequirement);
-    }
+    // Refresh local state
+    const reqs = await getRequirements();
+    state.selectedRequirement = reqs.find(r => r.id === state.selectedRequirement.id);
+    const idx = state.requirements.findIndex(r => r.id === state.selectedRequirement.id);
+    if (idx !== -1) state.requirements[idx] = state.selectedRequirement;
+    renderReqStats(state.selectedRequirement);
 
     state.currentAnalysis = result;
     state.currentAnalysisId = analysis.id;
-
     renderResults(result);
   } catch (e) {
     showMessage(document.getElementById('analyzeContainer'), '분석 실패: ' + e.message, 'error');
@@ -448,26 +440,27 @@ async function handleAnalyze() {
 }
 
 function setLoading(on) {
-  els.analyzeBtn().disabled = on;
-  els.loadingSpinner().classList.toggle('hidden', !on);
-  els.analyzeBtn().textContent = on ? '분석 중...' : '🔍 분석 시작';
+  document.getElementById('analyzeBtn').disabled = on;
+  document.getElementById('loadingSpinner').classList.toggle('hidden', !on);
+  document.getElementById('analyzeBtn').textContent = on ? '분석 중...' : '🔍 분석 시작';
 }
 
 // ─── Results ──────────────────────────────────────────────────────────────────
 function renderResults(result) {
   const prob = Math.min(100, Math.max(0, result.probability));
 
-  // Gauge
-  els.gaugeBar().style.width = prob + '%';
-  els.probabilityValue().textContent = prob + '%';
+  document.getElementById('gaugeBar').style.width = prob + '%';
+  document.getElementById('probabilityValue').textContent = prob + '%';
 
-  // Color the gauge based on probability
-  if (prob >= 70) els.gaugeBar().style.background = 'linear-gradient(to right, #0ca678, #2f9e44)';
-  else if (prob >= 40) els.gaugeBar().style.background = 'linear-gradient(to right, #fd7e14, #e8b400)';
-  else els.gaugeBar().style.background = 'linear-gradient(to right, #e03131, #fd7e14)';
+  if (prob >= 70) {
+    document.getElementById('gaugeBar').style.background = 'linear-gradient(to right, #0ca678, #2f9e44)';
+  } else if (prob >= 40) {
+    document.getElementById('gaugeBar').style.background = 'linear-gradient(to right, #fd7e14, #e8b400)';
+  } else {
+    document.getElementById('gaugeBar').style.background = 'linear-gradient(to right, #e03131, #fd7e14)';
+  }
 
-  // Recommendation badge
-  const badge = els.recommendationBadge();
+  const badge = document.getElementById('recommendationBadge');
   badge.textContent = result.recommendation || '';
   badge.className = 'recommendation-badge';
   if (result.recommendation?.includes('권고') && !result.recommendation?.includes('비')) {
@@ -478,19 +471,15 @@ function renderResults(result) {
     badge.classList.add('no-recommend');
   }
 
-  // Summary
-  els.resultSummary().textContent = result.summary || '';
+  document.getElementById('resultSummary').textContent = result.summary || '';
 
-  // Strengths
-  els.strengthsList().innerHTML = (result.strengths || [])
+  document.getElementById('strengthsList').innerHTML = (result.strengths || [])
     .map(s => `<li>${escapeHtml(s)}</li>`).join('');
 
-  // Weaknesses
-  els.weaknessesList().innerHTML = (result.weaknesses || [])
+  document.getElementById('weaknessesList').innerHTML = (result.weaknesses || [])
     .map(w => `<li>${escapeHtml(w)}</li>`).join('');
 
-  // Key matches
-  els.keyMatchesList().innerHTML = (result.keyMatches || []).map(m => `
+  document.getElementById('keyMatchesList').innerHTML = (result.keyMatches || []).map(m => `
     <div class="match-item ${m.matched ? 'matched' : 'unmatched'}">
       <span class="match-icon">${m.matched ? '✅' : '❌'}</span>
       <div class="match-content">
@@ -500,14 +489,12 @@ function renderResults(result) {
     </div>
   `).join('');
 
-  // Reset feedback
-  els.feedbackPassBtn().classList.remove('active');
-  els.feedbackFailBtn().classList.remove('active');
-  els.feedbackConfirm().classList.add('hidden');
+  document.getElementById('feedbackPassBtn').classList.remove('active');
+  document.getElementById('feedbackFailBtn').classList.remove('active');
+  document.getElementById('feedbackConfirm').classList.add('hidden');
 
-  // Show results
-  els.resultsSection().classList.remove('hidden');
-  els.resultsSection().scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('resultsSection').classList.remove('hidden');
+  document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
@@ -516,17 +503,19 @@ async function handleFeedback(type) {
 
   await updateAnalysisFeedback(state.selectedRequirement.id, state.currentAnalysisId, type);
 
-  // Update local state
-  state.requirements = await getRequirements();
-  state.selectedRequirement = state.requirements.find(r => r.id === state.selectedRequirement.id);
+  const reqs = await getRequirements();
+  state.selectedRequirement = reqs.find(r => r.id === state.selectedRequirement.id);
+  const idx = state.requirements.findIndex(r => r.id === state.selectedRequirement.id);
+  if (idx !== -1) state.requirements[idx] = state.selectedRequirement;
   renderReqStats(state.selectedRequirement);
 
-  els.feedbackPassBtn().classList.toggle('active', type === 'pass');
-  els.feedbackFailBtn().classList.toggle('active', type === 'fail');
+  document.getElementById('feedbackPassBtn').classList.toggle('active', type === 'pass');
+  document.getElementById('feedbackFailBtn').classList.toggle('active', type === 'fail');
 
   const label = type === 'pass' ? '합격' : '불합격';
-  els.feedbackConfirm().textContent = `${label}으로 기록되었습니다. 다음 분석에 반영됩니다.`;
-  els.feedbackConfirm().classList.remove('hidden');
+  const confirm = document.getElementById('feedbackConfirm');
+  confirm.textContent = `${label}으로 기록되었습니다. 다음 분석에 반영됩니다.`;
+  confirm.classList.remove('hidden');
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────
@@ -535,7 +524,7 @@ async function showHistory() {
   const req = state.requirements.find(r => r.id === state.selectedRequirement.id);
   const history = [...(req?.analysisHistory || [])].reverse();
 
-  els.historyList().innerHTML = history.length === 0
+  document.getElementById('historyList').innerHTML = history.length === 0
     ? '<p style="text-align:center;color:#868e96;font-size:12px;padding:20px">분석 이력이 없습니다.</p>'
     : history.map(h => {
         const date = new Date(h.timestamp).toLocaleDateString('ko-KR', {
@@ -554,8 +543,8 @@ async function showHistory() {
         `;
       }).join('');
 
-  els.historySection().classList.remove('hidden');
-  els.resultsSection().classList.add('hidden');
+  document.getElementById('historySection').classList.remove('hidden');
+  document.getElementById('resultsSection').classList.add('hidden');
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -571,15 +560,15 @@ function showMessage(container, text, type) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ─── Start ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);

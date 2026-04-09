@@ -1,107 +1,102 @@
-// content.js - Injected into pages to assist with text selection and capture coordination
+// content.js - Injected into pages
 
 (function () {
   'use strict';
 
-  // Avoid double-injection
   if (window.__resumeAnalyzerInjected) return;
   window.__resumeAnalyzerInjected = true;
 
-  let selectionOverlay = null;
-  let isSelectionMode = false;
-
-  // ─── Message handler from popup ───────────────────────────────────────────
+  // ─── Message handler ───────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.type === 'GET_SELECTION') {
-      const text = window.getSelection().toString().trim();
-      sendResponse({ text });
-    } else if (msg.type === 'GET_PAGE_TEXT') {
-      // Extract visible text from page (fallback when screenshot is not enough)
-      const text = extractVisibleText();
-      sendResponse({ text });
-    } else if (msg.type === 'ENABLE_SELECTION_MODE') {
-      enableSelectionMode();
+    if (msg.type === 'ENABLE_SELECTION_MODE') {
+      injectSelectionToolbar();
       sendResponse({ ok: true });
     } else if (msg.type === 'DISABLE_SELECTION_MODE') {
-      disableSelectionMode();
+      removeSelectionToolbar();
       sendResponse({ ok: true });
     }
-    return true; // keep channel open for async
+    return true;
   });
 
-  // ─── Visible text extraction ───────────────────────────────────────────────
-  function extractVisibleText() {
-    const skipTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'META', 'HEAD', 'IFRAME', 'OBJECT']);
-    const texts = [];
+  // ─── Floating selection toolbar ────────────────────────────────────────────
+  function injectSelectionToolbar() {
+    removeSelectionToolbar();
 
-    function walk(node) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent.trim();
-        if (text.length > 0) texts.push(text);
+    const toolbar = document.createElement('div');
+    toolbar.id = '__ra_toolbar__';
+    toolbar.style.cssText = `
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      height: 48px !important;
+      background: #1a56db !important;
+      color: white !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      padding: 0 20px !important;
+      z-index: 2147483647 !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+      font-size: 13px !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+      box-sizing: border-box !important;
+    `;
+
+    toolbar.innerHTML = `
+      <span style="font-weight:500">📋 분석할 이력서 텍스트를 드래그하여 선택하세요</span>
+      <div style="display:flex;gap:8px">
+        <button id="__ra_confirm__" style="
+          background:white;color:#1a56db;border:none;border-radius:6px;
+          padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;
+        ">선택 완료</button>
+        <button id="__ra_cancel__" style="
+          background:rgba(255,255,255,0.2);color:white;border:none;border-radius:6px;
+          padding:6px 14px;font-size:13px;cursor:pointer;
+        ">취소</button>
+      </div>
+    `;
+
+    document.body.appendChild(toolbar);
+    // Shift page content down so toolbar doesn't overlap
+    document.body.style.marginTop = '48px';
+
+    document.getElementById('__ra_confirm__').addEventListener('click', () => {
+      const text = window.getSelection().toString().trim();
+      if (!text) {
+        showToolbarError('텍스트를 먼저 드래그하여 선택해주세요.');
         return;
       }
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-      if (skipTags.has(node.tagName)) return;
+      chrome.runtime.sendMessage({ type: 'TEXT_SELECTED', text });
+      removeSelectionToolbar();
+    });
 
-      // Check visibility
-      const style = window.getComputedStyle(node);
-      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return;
+    document.getElementById('__ra_cancel__').addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'SELECTION_CANCELLED' });
+      removeSelectionToolbar();
+    });
+  }
 
-      for (const child of node.childNodes) {
-        walk(child);
-      }
+  function removeSelectionToolbar() {
+    const existing = document.getElementById('__ra_toolbar__');
+    if (existing) {
+      existing.remove();
+      document.body.style.marginTop = '';
     }
-
-    walk(document.body);
-    return texts.join('\n');
   }
 
-  // ─── Visual selection mode (highlight text regions) ───────────────────────
-  function enableSelectionMode() {
-    isSelectionMode = true;
-    document.body.style.cursor = 'text';
-
-    // Show tooltip
-    showTooltip('텍스트를 드래그하여 선택한 후, 확장 프로그램에서 "선택된 텍스트 가져오기"를 클릭하세요.');
-  }
-
-  function disableSelectionMode() {
-    isSelectionMode = false;
-    document.body.style.cursor = '';
-    hideTooltip();
-  }
-
-  let tooltip = null;
-  function showTooltip(text) {
-    hideTooltip();
-    tooltip = document.createElement('div');
-    tooltip.id = '__resume_analyzer_tooltip__';
-    tooltip.style.cssText = `
-      position: fixed;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(26, 86, 219, 0.95);
-      color: white;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-family: -apple-system, sans-serif;
-      z-index: 2147483647;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      max-width: 400px;
-      text-align: center;
-      pointer-events: none;
-    `;
-    tooltip.textContent = text;
-    document.body.appendChild(tooltip);
-  }
-
-  function hideTooltip() {
-    if (tooltip) {
-      tooltip.remove();
-      tooltip = null;
+  function showToolbarError(msg) {
+    const toolbar = document.getElementById('__ra_toolbar__');
+    if (!toolbar) return;
+    let err = toolbar.querySelector('#__ra_err__');
+    if (!err) {
+      err = document.createElement('span');
+      err.id = '__ra_err__';
+      err.style.cssText = 'color:#ffd43b;font-size:12px;margin-left:12px;';
+      toolbar.querySelector('span').after(err);
     }
+    err.textContent = msg;
+    setTimeout(() => { if (err) err.textContent = ''; }, 2500);
   }
 
 })();

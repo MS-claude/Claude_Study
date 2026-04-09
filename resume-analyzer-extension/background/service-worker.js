@@ -1,7 +1,13 @@
-// service-worker.js - Background service worker
+// background/service-worker.js
 
-// Handle messages from popup or content scripts
+// Open side panel when extension icon is clicked
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch(console.error);
+
+// Handle messages
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Tab capture request from side panel
   if (msg.type === 'CAPTURE_TAB') {
     chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
       if (chrome.runtime.lastError) {
@@ -12,9 +18,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true; // async
   }
+
+  // Close side panel request
+  if (msg.type === 'CLOSE_SIDE_PANEL') {
+    chrome.windows.getCurrent((win) => {
+      chrome.sidePanel.setOptions({ enabled: false, tabId: sender.tab?.id });
+      // Re-enable for future use
+      setTimeout(() => {
+        chrome.sidePanel.setOptions({ enabled: true });
+      }, 500);
+    });
+    return true;
+  }
 });
 
-// Install event
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     console.log('Resume Analyzer installed');

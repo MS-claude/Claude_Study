@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Resume Analyzer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI-powered resume screening assistant with learning capabilities",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "tabs"
+    "tabs",
+    "sidePanel",
+    "windows"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -16,12 +18,15 @@
     "service_worker": "background/service-worker.js"
   },
   "action": {
-    "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
-    }
+    },
+    "default_title": "Resume Analyzer"
+  },
+  "side_panel": {
+    "default_path": "popup/popup.html"
   },
   "content_scripts": [
     {
