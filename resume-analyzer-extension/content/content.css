@@ -1,0 +1,8 @@
+/* Minimal styles for content script injections */
+#__resume_analyzer_tooltip__ {
+  position: fixed !important;
+  top: 10px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 2147483647 !important;
+}

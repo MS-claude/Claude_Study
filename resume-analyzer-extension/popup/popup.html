@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Analyzer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1 class="header-title">
+        <span class="header-icon">📄</span>
+        Resume Analyzer
+      </h1>
+      <button id="settingsBtn" class="icon-btn" title="설정">⚙️</button>
+    </header>
+
+    <!-- Settings Panel (hidden by default) -->
+    <div id="settingsPanel" class="panel hidden">
+      <h2 class="panel-title">설정</h2>
+      <div class="form-group">
+        <label for="apiKeyInput">Anthropic API Key</label>
+        <div class="input-row">
+          <input type="password" id="apiKeyInput" placeholder="sk-ant-..." class="input-field" />
+          <button id="saveApiKeyBtn" class="btn btn-small btn-primary">저장</button>
+        </div>
+        <span class="hint">Claude API 키를 입력하세요. 로컬에만 저장됩니다.</span>
+      </div>
+      <button id="closeSettingsBtn" class="btn btn-secondary btn-full">닫기</button>
+    </div>
+
+    <!-- Main Content -->
+    <main id="mainContent">
+
+      <!-- Step 1: Requirements -->
+      <section class="section">
+        <div class="section-header">
+          <span class="step-badge">1</span>
+          <h2>채용 요구사항 (JD)</h2>
+        </div>
+
+        <div class="form-group">
+          <label for="requirementSelect">요구사항 선택</label>
+          <div class="select-row">
+            <select id="requirementSelect" class="select-field">
+              <option value="">-- 선택 --</option>
+              <option value="__new__">+ 새 요구사항 추가</option>
+            </select>
+            <button id="deleteReqBtn" class="btn btn-small btn-danger hidden" title="삭제">🗑️</button>
+          </div>
+        </div>
+
+        <!-- New requirement form -->
+        <div id="newReqForm" class="sub-form hidden">
+          <div class="form-group">
+            <label for="reqNameInput">포지션명</label>
+            <input type="text" id="reqNameInput" placeholder="예: 카카오 백엔드 개발자" class="input-field" />
+          </div>
+          <div class="form-group">
+            <label for="reqContentInput">요구사항 내용</label>
+            <textarea id="reqContentInput" placeholder="채용공고 내용을 붙여넣으세요..." class="textarea-field" rows="6"></textarea>
+          </div>
+          <div class="btn-row">
+            <button id="saveNewReqBtn" class="btn btn-primary">저장</button>
+            <button id="cancelNewReqBtn" class="btn btn-secondary">취소</button>
+          </div>
+        </div>
+
+        <!-- Edit existing requirement -->
+        <div id="editReqForm" class="sub-form hidden">
+          <div class="form-group">
+            <label for="editReqNameInput">포지션명</label>
+            <input type="text" id="editReqNameInput" class="input-field" />
+          </div>
+          <div class="form-group">
+            <label for="editReqContentInput">요구사항 내용</label>
+            <textarea id="editReqContentInput" class="textarea-field" rows="6"></textarea>
+          </div>
+          <div class="btn-row">
+            <button id="saveEditReqBtn" class="btn btn-primary">수정 저장</button>
+            <button id="cancelEditReqBtn" class="btn btn-secondary">취소</button>
+          </div>
+          <div class="stats-row" id="reqStats"></div>
+        </div>
+      </section>
+
+      <!-- Step 2: Capture -->
+      <section class="section" id="captureSection">
+        <div class="section-header">
+          <span class="step-badge">2</span>
+          <h2>이력서 분석</h2>
+        </div>
+
+        <div class="capture-tabs">
+          <button class="tab-btn active" data-tab="capture">화면 캡처</button>
+          <button class="tab-btn" data-tab="selection">텍스트 선택</button>
+          <button class="tab-btn" data-tab="paste">직접 입력</button>
+        </div>
+
+        <!-- Capture Tab -->
+        <div id="captureTab" class="tab-content active">
+          <p class="tab-desc">현재 화면을 캡처하여 이력서를 분석합니다. 스크롤하여 여러 영역을 캡처할 수 있습니다.</p>
+          <div class="capture-actions">
+            <button id="captureBtn" class="btn btn-capture">
+              📷 현재 화면 캡처
+            </button>
+            <button id="scrollCaptureBtn" class="btn btn-secondary">
+              📜 스크롤 캡처 (다중)
+            </button>
+          </div>
+          <div id="capturePreview" class="capture-preview hidden">
+            <div class="preview-header">
+              <span>캡처된 이미지 (<span id="captureCount">0</span>장)</span>
+              <button id="clearCaptureBtn" class="btn btn-small btn-danger">지우기</button>
+            </div>
+            <div id="captureList" class="capture-list"></div>
+          </div>
+        </div>
+
+        <!-- Selection Tab -->
+        <div id="selectionTab" class="tab-content hidden">
+          <p class="tab-desc">페이지에서 분석할 텍스트를 드래그하여 선택한 후 아래 버튼을 클릭하세요.</p>
+          <button id="getSelectionBtn" class="btn btn-capture">
+            🖱️ 선택된 텍스트 가져오기
+          </button>
+          <div id="selectionPreview" class="text-preview hidden">
+            <div class="preview-header">
+              <span>선택된 텍스트</span>
+              <button id="clearSelectionBtn" class="btn btn-small btn-danger">지우기</button>
+            </div>
+            <pre id="selectionText" class="preview-text"></pre>
+          </div>
+        </div>
+
+        <!-- Paste Tab -->
+        <div id="pasteTab" class="tab-content hidden">
+          <p class="tab-desc">이력서 내용을 직접 붙여넣거나 입력하세요.</p>
+          <textarea id="pasteTextInput" class="textarea-field" rows="8" placeholder="이력서 내용을 여기에 붙여넣으세요..."></textarea>
+        </div>
+      </section>
+
+      <!-- Analyze Button -->
+      <div class="analyze-container" id="analyzeContainer">
+        <button id="analyzeBtn" class="btn btn-analyze" disabled>
+          🔍 분석 시작
+        </button>
+        <div id="loadingSpinner" class="spinner hidden"></div>
+      </div>
+
+      <!-- Step 3: Results -->
+      <section class="section hidden" id="resultsSection">
+        <div class="section-header">
+          <span class="step-badge">3</span>
+          <h2>분석 결과</h2>
+        </div>
+
+        <!-- Probability Gauge -->
+        <div class="probability-card">
+          <div class="probability-label">서류 합격 예상 확률</div>
+          <div class="probability-gauge">
+            <div class="gauge-bar">
+              <div id="gaugeBar" class="gauge-fill"></div>
+            </div>
+            <div id="probabilityValue" class="probability-value">0%</div>
+          </div>
+          <div id="recommendationBadge" class="recommendation-badge"></div>
+        </div>
+
+        <!-- Summary -->
+        <div class="result-block">
+          <h3>종합 평가</h3>
+          <p id="resultSummary" class="result-text"></p>
+        </div>
+
+        <!-- Strengths & Weaknesses -->
+        <div class="result-columns">
+          <div class="result-block">
+            <h3>✅ 강점</h3>
+            <ul id="strengthsList" class="result-list strength-list"></ul>
+          </div>
+          <div class="result-block">
+            <h3>⚠️ 약점</h3>
+            <ul id="weaknessesList" class="result-list weakness-list"></ul>
+          </div>
+        </div>
+
+        <!-- Key Matches -->
+        <div class="result-block">
+          <h3>요구사항 매칭</h3>
+          <div id="keyMatchesList" class="matches-list"></div>
+        </div>
+
+        <!-- Feedback -->
+        <div class="feedback-section">
+          <h3>실제 결과 입력 (학습용)</h3>
+          <p class="hint">실제 서류 전형 결과가 나오면 입력해주세요. 다음 분석에 활용됩니다.</p>
+          <div class="feedback-buttons">
+            <button id="feedbackPassBtn" class="btn btn-feedback btn-pass">✓ 합격</button>
+            <button id="feedbackFailBtn" class="btn btn-feedback btn-fail">✗ 불합격</button>
+          </div>
+          <div id="feedbackConfirm" class="feedback-confirm hidden"></div>
+        </div>
+
+        <!-- History Button -->
+        <button id="viewHistoryBtn" class="btn btn-secondary btn-full">📊 분석 이력 보기</button>
+      </section>
+
+      <!-- History Panel -->
+      <section class="section hidden" id="historySection">
+        <div class="section-header">
+          <h2>분석 이력</h2>
+          <button id="closeHistoryBtn" class="icon-btn">✕</button>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="../utils/storage.js"></script>
+  <script src="../utils/api.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
