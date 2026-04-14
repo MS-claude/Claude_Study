@@ -64,7 +64,7 @@ ${resumeText}
  * @param {number} maxTokens
  * @param {string} [modelOverride] - optional model name override
  */
-async function callGeminiAPI(apiKey, contents, maxTokens = 1500, modelOverride) {
+async function callGeminiAPI(apiKey, contents, maxTokens = 4096, modelOverride) {
   const model = modelOverride || (typeof getModelName === 'function' ? await getModelName() : 'gemini-2.5-flash');
   const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
 
@@ -179,7 +179,7 @@ ${requirement.content}
 }`
   });
 
-  return callGeminiAPI(apiKey, [{ parts }], 2000);
+  return callGeminiAPI(apiKey, [{ parts }], 8192);
 }
 
 if (typeof module !== 'undefined') {
