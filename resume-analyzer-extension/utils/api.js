@@ -75,7 +75,8 @@ async function callGeminiAPI(apiKey, contents, maxTokens = 1500, modelOverride) 
       contents,
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: maxTokens
+        maxOutputTokens: maxTokens,
+        responseMimeType: 'application/json'
       }
     })
   });
@@ -93,10 +94,20 @@ async function callGeminiAPI(apiKey, contents, maxTokens = 1500, modelOverride) 
 
   const text = data.candidates[0].content.parts[0].text;
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('API 응답 형식이 올바르지 않습니다.');
+  // 1) 직접 파싱 시도 (responseMimeType: application/json 효과)
+  try { return JSON.parse(text); } catch {}
 
-  return JSON.parse(jsonMatch[0]);
+  // 2) 마크다운 코드블록 제거 후 파싱 (```json ... ```)
+  const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
+  try { return JSON.parse(stripped); } catch {}
+
+  // 3) 중괄호 블록 추출 후 파싱
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try { return JSON.parse(jsonMatch[0]); } catch {}
+  }
+
+  throw new Error(`응답 파싱 실패. 모델 응답:\n${text.slice(0, 300)}`);
 }
 
 /**
