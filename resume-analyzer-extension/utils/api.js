@@ -1,6 +1,7 @@
 // utils/api.js - Google Gemini API integration
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const MAX_OUTPUT_TOKENS = 65536; // Gemini 2.5 Flash 최대값
 
 /**
  * Build few-shot examples from historical analyses
@@ -9,63 +10,53 @@ function buildFewShotExamples(history) {
   const labeled = history.filter(h => h.feedback === 'pass' || h.feedback === 'fail');
   if (labeled.length === 0) return '';
 
-  const examples = labeled.slice(-5).map(h => {
+  const examples = labeled.slice(-3).map(h => {
     const label = h.feedback === 'pass' ? '합격' : '불합격';
-    const excerpt = h.resumeText.slice(0, 500);
-    return `[과거 사례 - 실제 결과: ${label}]
-이력서 내용 (일부): ${excerpt}
-확률 예측: ${h.probability}%
----`;
-  }).join('\n\n');
+    const excerpt = h.resumeText.slice(0, 300);
+    return `[사례: ${label} / 예측확률: ${h.probability}%]\n${excerpt}\n---`;
+  }).join('\n');
 
-  return `\n\n## 과거 분석 사례 (실제 결과 기반 학습 데이터)\n${examples}`;
+  return `\n\n## 과거 사례 (학습 데이터)\n${examples}`;
 }
 
 /**
- * Build analysis prompt
+ * Build analysis prompt — 응답을 최대한 간결하게 요청
  */
 function buildPrompt(requirement, resumeText, history) {
   const fewShot = buildFewShotExamples(history);
 
-  return `당신은 채용 담당자 관점에서 이력서를 평가하는 전문가입니다.
-아래의 채용 요구사항과 이력서를 분석하여 서류 합격 확률을 산출해주세요.${fewShot}
+  return `채용 담당자 관점에서 이력서를 평가하라. 반드시 JSON만 출력하라.${fewShot}
 
-## 채용 요구사항 (JD)
-포지션명: ${requirement.name}
+## JD (포지션: ${requirement.name})
 ${requirement.content}
 
-## 분석할 이력서
+## 이력서
 ${resumeText}
 
-## 분석 지침
-1. JD의 필수 요건, 우대 요건을 각각 파악하세요.
-2. 이력서가 각 요건을 얼마나 충족하는지 평가하세요.
-3. 과거 합격/불합격 사례가 있다면 그 패턴을 참고하세요.
-4. 서류 전형 단계이므로 실제 직무 수행 능력보다 서류상 매칭도를 평가하세요.
-
-## 응답 형식 (JSON으로만 응답, 다른 텍스트 없이)
+## 출력 형식 (JSON만, 설명 없이)
 {
   "probability": 75,
-  "summary": "전체 평가 요약 (2-3문장)",
-  "strengths": ["강점 1", "강점 2", "강점 3"],
-  "weaknesses": ["약점 1", "약점 2"],
+  "summary": "2문장 이내 평가",
+  "strengths": ["강점1", "강점2", "강점3"],
+  "weaknesses": ["약점1", "약점2"],
   "keyMatches": [
-    {"requirement": "요구사항 항목", "matched": true, "detail": "이력서 내 근거"},
-    {"requirement": "요구사항 항목", "matched": false, "detail": "미충족 이유"}
+    {"requirement": "항목명(15자이내)", "matched": true, "detail": "근거(20자이내)"}
   ],
   "recommendation": "지원 권고"
-}`;
+}
+
+규칙:
+- keyMatches는 핵심 항목 최대 5개만
+- 모든 문자열은 간결하게
+- JSON 외 다른 텍스트 금지`;
 }
 
 /**
- * Call Gemini API with given contents
- * @param {string} apiKey
- * @param {Array} contents
- * @param {number} maxTokens
- * @param {string} [modelOverride] - optional model name override
+ * Call Gemini API
  */
-async function callGeminiAPI(apiKey, contents, maxTokens = 4096, modelOverride) {
-  const model = modelOverride || (typeof getModelName === 'function' ? await getModelName() : 'gemini-2.5-flash');
+async function callGeminiAPI(apiKey, contents, modelOverride) {
+  const model = modelOverride ||
+    (typeof getModelName === 'function' ? await getModelName() : 'gemini-2.5-flash');
   const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
@@ -74,9 +65,8 @@ async function callGeminiAPI(apiKey, contents, maxTokens = 4096, modelOverride) 
     body: JSON.stringify({
       contents,
       generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: maxTokens,
-        responseMimeType: 'application/json'
+        temperature: 0.2,
+        maxOutputTokens: MAX_OUTPUT_TOKENS
       }
     })
   });
@@ -92,45 +82,41 @@ async function callGeminiAPI(apiKey, contents, maxTokens = 4096, modelOverride) 
     throw new Error('API 응답이 없습니다. 안전 필터에 의해 차단되었을 수 있습니다.');
   }
 
-  const text = data.candidates[0].content.parts[0].text;
+  const candidate = data.candidates[0];
 
-  // 1) 직접 파싱 시도 (responseMimeType: application/json 효과)
+  // 응답이 토큰 한도로 잘렸는지 체크
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    throw new Error('응답이 너무 길어 잘렸습니다. 더 짧은 이력서로 시도하거나 JD를 간결하게 줄여보세요.');
+  }
+
+  const text = candidate.content?.parts?.[0]?.text ?? '';
+
+  // 1) 직접 파싱
   try { return JSON.parse(text); } catch {}
 
-  // 2) 마크다운 코드블록 제거 후 파싱 (```json ... ```)
+  // 2) 마크다운 코드블록 제거
   const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
   try { return JSON.parse(stripped); } catch {}
 
-  // 3) 중괄호 블록 추출 후 파싱
-  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    try { return JSON.parse(jsonMatch[0]); } catch {}
+  // 3) 중괄호 블록 추출
+  const match = stripped.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch {}
   }
 
-  throw new Error(`응답 파싱 실패. 모델 응답:\n${text.slice(0, 300)}`);
+  throw new Error(`응답 파싱 실패. 모델 응답 (앞 500자):\n${text.slice(0, 500)}`);
 }
 
 /**
- * Analyze resume text against job requirements
- * @param {string} apiKey - Google AI API key
- * @param {Object} requirement - { name, content, analysisHistory }
- * @param {string} resumeText
- * @returns {Promise<Object>}
+ * Analyze resume text
  */
 async function analyzeResume(apiKey, requirement, resumeText) {
   const prompt = buildPrompt(requirement, resumeText, requirement.analysisHistory || []);
-
-  return callGeminiAPI(apiKey, [
-    { parts: [{ text: prompt }] }
-  ]);
+  return callGeminiAPI(apiKey, [{ parts: [{ text: prompt }] }]);
 }
 
 /**
- * Analyze resume from screenshot images using Gemini Vision
- * @param {string} apiKey
- * @param {Object} requirement
- * @param {string|string[]} base64Images - single or array of base64 PNG images
- * @returns {Promise<Object>}
+ * Analyze resume from screenshot images
  */
 async function analyzeResumeFromImage(apiKey, requirement, base64Images) {
   const fewShot = buildFewShotExamples(requirement.analysisHistory || []);
@@ -138,48 +124,34 @@ async function analyzeResumeFromImage(apiKey, requirement, base64Images) {
 
   const parts = [];
 
-  // Add all captured images
   images.forEach((img, i) => {
-    if (images.length > 1) {
-      parts.push({ text: `[화면 캡처 ${i + 1}/${images.length}]` });
-    }
-    parts.push({
-      inlineData: {
-        mimeType: 'image/png',
-        data: img
-      }
-    });
+    if (images.length > 1) parts.push({ text: `[캡처 ${i + 1}/${images.length}]` });
+    parts.push({ inlineData: { mimeType: 'image/png', data: img } });
   });
 
-  // Add analysis prompt
   parts.push({
-    text: `당신은 채용 담당자 관점에서 이력서를 평가하는 전문가입니다.
-위 이미지(들)에서 이력서 내용을 추출하고, 아래 채용 요구사항과 비교하여 서류 합격 확률을 산출해주세요.${fewShot}
+    text: `이미지에서 이력서 내용을 읽고 아래 JD와 비교하라. 반드시 JSON만 출력하라.${fewShot}
 
-## 채용 요구사항 (JD)
-포지션명: ${requirement.name}
+## JD (포지션: ${requirement.name})
 ${requirement.content}
 
-## 분석 지침
-1. 이미지에서 이력서 텍스트를 최대한 정확히 읽어내세요.
-2. JD의 필수/우대 요건과 이력서의 매칭도를 평가하세요.
-3. 여러 이미지가 있다면 순서대로 이어지는 이력서로 간주하세요.
-
-## 응답 형식 (JSON으로만 응답)
+## 출력 형식 (JSON만)
 {
-  "extractedText": "이미지에서 추출한 이력서 전문",
+  "extractedText": "이력서 전문",
   "probability": 75,
-  "summary": "전체 평가 요약 (2-3문장)",
-  "strengths": ["강점 1", "강점 2"],
-  "weaknesses": ["약점 1"],
+  "summary": "2문장 이내 평가",
+  "strengths": ["강점1", "강점2", "강점3"],
+  "weaknesses": ["약점1", "약점2"],
   "keyMatches": [
-    {"requirement": "요구사항", "matched": true, "detail": "근거"}
+    {"requirement": "항목명(15자이내)", "matched": true, "detail": "근거(20자이내)"}
   ],
   "recommendation": "지원 권고"
-}`
+}
+
+규칙: keyMatches 최대 5개, JSON 외 텍스트 금지`
   });
 
-  return callGeminiAPI(apiKey, [{ parts }], 8192);
+  return callGeminiAPI(apiKey, [{ parts }]);
 }
 
 if (typeof module !== 'undefined') {
