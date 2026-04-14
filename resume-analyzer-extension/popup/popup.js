@@ -27,6 +27,8 @@ async function loadRequirements() {
 async function loadApiKey() {
   const key = await getApiKey();
   if (key) document.getElementById('apiKeyInput').value = key;
+  const model = await getModelName();
+  document.getElementById('modelNameInput').value = model;
 }
 
 function renderRequirementDropdown() {
@@ -69,6 +71,7 @@ function bindEvents() {
   // Settings
   document.getElementById('closeSettingsBtn').addEventListener('click', () => toggleSettings(false));
   document.getElementById('saveApiKeyBtn').addEventListener('click', handleSaveApiKey);
+  document.getElementById('saveModelBtn').addEventListener('click', handleSaveModel);
 
   // Requirements
   document.getElementById('requirementSelect').addEventListener('change', handleRequirementSelect);
@@ -144,6 +147,13 @@ async function handleSaveApiKey() {
   await saveApiKey(key);
   showMessage(document.getElementById('settingsPanel'), 'API 키가 저장되었습니다.', 'success');
   setTimeout(() => toggleSettings(false), 1000);
+}
+
+async function handleSaveModel() {
+  const name = document.getElementById('modelNameInput').value.trim();
+  if (!name) return showMessage(document.getElementById('settingsPanel'), '모델명을 입력하세요.', 'error');
+  await saveModelName(name);
+  showMessage(document.getElementById('settingsPanel'), `모델이 "${name}"으로 저장되었습니다.`, 'success');
 }
 
 // ─── Requirements ─────────────────────────────────────────────────────────────

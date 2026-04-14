@@ -1,7 +1,6 @@
 // utils/api.js - Google Gemini API integration
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const MODEL = 'gemini-2.0-flash';
 
 /**
  * Build few-shot examples from historical analyses
@@ -60,9 +59,14 @@ ${resumeText}
 
 /**
  * Call Gemini API with given contents
+ * @param {string} apiKey
+ * @param {Array} contents
+ * @param {number} maxTokens
+ * @param {string} [modelOverride] - optional model name override
  */
-async function callGeminiAPI(apiKey, contents, maxTokens = 1500) {
-  const url = `${GEMINI_API_BASE}/${MODEL}:generateContent?key=${apiKey}`;
+async function callGeminiAPI(apiKey, contents, maxTokens = 1500, modelOverride) {
+  const model = modelOverride || (typeof getModelName === 'function' ? await getModelName() : 'gemini-2.5-flash');
+  const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',

@@ -3,8 +3,11 @@
 const STORAGE_KEYS = {
   REQUIREMENTS: 'requirements',
   API_KEY: 'apiKey',
+  MODEL_NAME: 'modelName',
   SETTINGS: 'settings'
 };
+
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 /**
  * Get all saved requirements
@@ -139,6 +142,28 @@ async function saveApiKey(key) {
   });
 }
 
+/**
+ * Get saved model name (falls back to DEFAULT_MODEL)
+ * @returns {Promise<string>}
+ */
+async function getModelName() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(STORAGE_KEYS.MODEL_NAME, (result) => {
+      resolve(result[STORAGE_KEYS.MODEL_NAME] || DEFAULT_MODEL);
+    });
+  });
+}
+
+/**
+ * Save model name
+ * @param {string} name
+ */
+async function saveModelName(name) {
+  return new Promise((resolve) => {
+    chrome.storage.local.set({ [STORAGE_KEYS.MODEL_NAME]: name }, resolve);
+  });
+}
+
 // Internal helpers
 async function setRequirements(requirements) {
   return new Promise((resolve) => {
@@ -160,6 +185,8 @@ if (typeof module !== 'undefined') {
     addAnalysisResult,
     updateAnalysisFeedback,
     getApiKey,
-    saveApiKey
+    saveApiKey,
+    getModelName,
+    saveModelName
   };
 }
