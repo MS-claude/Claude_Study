@@ -1,46 +1,69 @@
-// utils/sheets.js - Apps Script web app wrapper
+// utils/sheets.js - Google Sheets API v4 via OAuth2
 
-const APPS_SCRIPT_KEY = 'appsScriptUrl';
+const SHEETS_BASE    = 'https://sheets.googleapis.com/v4/spreadsheets';
+const SOURCING_SHEET = '소싱포지션';
+const ANALYSIS_SHEET = '분析현황';
 
-async function getAppsScriptUrl() {
-  return new Promise(resolve =>
-    chrome.storage.local.get(APPS_SCRIPT_KEY, r => resolve(r[APPS_SCRIPT_KEY] || null))
-  );
+// 0-based column index → A1 letter(s)
+function colLetter(i) {
+  let s = '';
+  let n = i + 1;
+  while (n > 0) {
+    s = String.fromCharCode(65 + (n - 1) % 26) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }
 
-async function saveAppsScriptUrl(url) {
-  return new Promise(resolve =>
-    chrome.storage.local.set({ [APPS_SCRIPT_KEY]: url }, resolve)
-  );
+// Row array → { 'header': 0-based col index }
+function makeHeaderMap(row) {
+  const map = {};
+  (row || []).forEach((h, i) => { if (h) map[String(h).trim()] = i; });
+  return map;
 }
 
-async function sheetsGet(action, params = {}) {
-  const url = await getAppsScriptUrl();
-  if (!url) throw new Error('⚙️ 설정에서 Apps Script URL을 입력하세요.');
-
-  const qs = new URLSearchParams({ action, ...params }).toString();
-  const res = await fetch(`${url}?${qs}`, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`Sheets 연결 오류 (${res.status})`);
-
-  const data = await res.json();
-  if (data.error) throw new Error('Sheets: ' + data.error);
-  return data;
+function encRange(sheet, range) {
+  return encodeURIComponent(`'${sheet}'!${range}`);
 }
 
-async function sheetsPost(action, payload = {}) {
-  const url = await getAppsScriptUrl();
-  if (!url) throw new Error('⚙️ 설정에서 Apps Script URL을 입력하세요.');
-
-  const res = await fetch(url, {
-    method: 'POST',
-    redirect: 'follow',
-    body: JSON.stringify({ action, ...payload })
+async function apiGet(path) {
+  const token = await getAccessToken();
+  const res = await fetch(`${SHEETS_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error(`Sheets 연결 오류 (${res.status})`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Sheets API 오류 (${res.status})`);
+  }
+  return res.json();
+}
 
-  const data = await res.json();
-  if (data.error) throw new Error('Sheets: ' + data.error);
-  return data;
+async function apiPost(path, body) {
+  const token = await getAccessToken();
+  const res = await fetch(`${SHEETS_BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Sheets API 오류 (${res.status})`);
+  }
+  return res.json();
+}
+
+async function apiPut(path, body) {
+  const token = await getAccessToken();
+  const res = await fetch(`${SHEETS_BASE}${path}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Sheets API 오류 (${res.status})`);
+  }
+  return res.json();
 }
 
 /**
@@ -48,27 +71,91 @@ async function sheetsPost(action, payload = {}) {
  * @returns {Promise<Array<{searchCode, positionName, jd, preference}>>}
  */
 async function fetchPositions() {
-  const { positions } = await sheetsGet('getPositions');
-  return positions || [];
+  const id = await getSpreadsheetId();
+  if (!id) throw new Error('⚙️ 설정에서 Spreadsheet ID를 입력하세요.');
+
+  const data = await apiGet(`/${id}/values/${encRange(SOURCING_SHEET, 'A5:Z500')}`);
+  const rows = data.values || [];
+  if (rows.length === 0) return [];
+
+  const hdr = makeHeaderMap(rows[0]);
+  const SEARCH_CODE_IDX = 2; // C열 고정 (0-based)
+
+  return rows.slice(1)
+    .filter(r => r[SEARCH_CODE_IDX])
+    .map(r => ({
+      searchCode:   String(r[SEARCH_CODE_IDX] || ''),
+      positionName: hdr['포지션명']  != null ? String(r[hdr['포지션명']]  || '') : '',
+      jd:           hdr['JD']        != null ? String(r[hdr['JD']]        || '') : '',
+      preference:   hdr['선호 조건'] != null ? String(r[hdr['선호 조건']] || '') : ''
+    }));
 }
 
 /**
- * 분석현황 탭에서 특정 포지션의 후보자 목록 조회
+ * 분析현황 탭에서 특정 포지션의 후보자 목록 조회
  * @param {string} searchCode
  * @returns {Promise<Array<{rowIndex, name, date, career, analysis, result}>>}
  */
 async function fetchCandidates(searchCode) {
-  const { candidates } = await sheetsGet('getCandidates', { searchCode });
-  return candidates || [];
+  if (!searchCode) return [];
+  const id = await getSpreadsheetId();
+  if (!id) throw new Error('⚙️ 설정에서 Spreadsheet ID를 입력하세요.');
+
+  const data = await apiGet(`/${id}/values/${encRange(ANALYSIS_SHEET, 'A1:Z1000')}`);
+  const rows = data.values || [];
+  if (rows.length < 2) return [];
+
+  const hdr = makeHeaderMap(rows[0]);
+  const sc  = String(searchCode);
+
+  return rows.slice(1)
+    .map((r, i) => ({ r, rowIndex: i + 2 }))
+    .filter(({ r }) => String(r[hdr['서칭코드']] || '') === sc)
+    .map(({ r, rowIndex }) => ({
+      rowIndex,
+      name:     String(r[hdr['이름']]     || ''),
+      date:     String(r[hdr['서칭일']]   || ''),
+      career:   String(r[hdr['주요경력']] || ''),
+      analysis: String(r[hdr['분析내용']] || ''),
+      result:   String(r[hdr['검토결과']] || '')
+    }));
 }
 
 /**
- * 분석현황 탭에 새 후보자 기록 추가
+ * 분析현황 탭에 새 후보자 기록 추가
  * @param {Object} data - { searchCode, name, date, career, analysis, result }
  * @returns {Promise<{rowIndex: number}>}
  */
 async function addCandidateRecord(data) {
-  return sheetsPost('addCandidate', { data });
+  const id = await getSpreadsheetId();
+  if (!id) throw new Error('⚙️ 설정에서 Spreadsheet ID를 입력하세요.');
+
+  const hdrData = await apiGet(`/${id}/values/${encRange(ANALYSIS_SHEET, 'A1:Z1')}`);
+  const hdrRow  = (hdrData.values || [[]])[0] || [];
+  const hdr     = makeHeaderMap(hdrRow);
+
+  const maxCol = Object.values(hdr).length ? Math.max(...Object.values(hdr)) : 5;
+  const row    = new Array(maxCol + 1).fill('');
+  const set    = (key, val) => { if (hdr[key] != null) row[hdr[key]] = val || ''; };
+
+  set('서칭코드', data.searchCode);
+  set('이름',     data.name);
+  set('서칭일',   data.date);
+  set('주요경력', data.career);
+  set('분析내용', data.analysis);
+  set('검토결과', data.result || '');
+
+  const res = await apiPost(
+    `/${id}/values/${encRange(ANALYSIS_SHEET, 'A:Z')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { values: [row] }
+  );
+
+  // Parse row number from updatedRange like "'분析현황'!A10:F10"
+  const updatedRange = res.updates?.updatedRange || '';
+  const match = updatedRange.match(/:([A-Z]+)(\d+)$/);
+  const rowIndex = match ? parseInt(match[2]) : null;
+
+  return { rowIndex };
 }
 
 /**
@@ -77,9 +164,23 @@ async function addCandidateRecord(data) {
  * @param {string} result - "합격 - 사유: ..." | "불합격 - 사유: ..."
  */
 async function updateCandidateResult(rowIndex, result) {
-  return sheetsPost('updateResult', { rowIndex, result });
+  const id = await getSpreadsheetId();
+  if (!id) throw new Error('⚙️ 설정에서 Spreadsheet ID를 입력하세요.');
+
+  const hdrData = await apiGet(`/${id}/values/${encRange(ANALYSIS_SHEET, 'A1:Z1')}`);
+  const hdrRow  = (hdrData.values || [[]])[0] || [];
+  const hdr     = makeHeaderMap(hdrRow);
+
+  const col = hdr['검토결과'];
+  if (col == null) throw new Error("'검토결과' 컬럼을 찾을 수 없습니다.");
+
+  const cellRange = encRange(ANALYSIS_SHEET, `${colLetter(col)}${rowIndex}`);
+  await apiPut(
+    `/${id}/values/${cellRange}?valueInputOption=USER_ENTERED`,
+    { values: [[result]] }
+  );
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { getAppsScriptUrl, saveAppsScriptUrl, fetchPositions, fetchCandidates, addCandidateRecord, updateCandidateResult };
+  module.exports = { fetchPositions, fetchCandidates, addCandidateRecord, updateCandidateResult };
 }

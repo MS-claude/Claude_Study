@@ -1,4 +1,4 @@
-// utils/storage.js - Local settings only (JD data now lives in Google Sheets)
+// utils/storage.js - Local settings
 
 async function getApiKey() {
   return new Promise(resolve =>
@@ -24,6 +24,46 @@ async function saveModelName(name) {
   );
 }
 
+async function getClientId() {
+  return new Promise(resolve =>
+    chrome.storage.local.get('clientId', r => resolve(r.clientId || null))
+  );
+}
+
+async function saveClientId(id) {
+  return new Promise(resolve =>
+    chrome.storage.local.set({ clientId: id }, resolve)
+  );
+}
+
+async function getClientSecret() {
+  return new Promise(resolve =>
+    chrome.storage.local.get('clientSecret', r => resolve(r.clientSecret || null))
+  );
+}
+
+async function saveClientSecret(secret) {
+  return new Promise(resolve =>
+    chrome.storage.local.set({ clientSecret: secret }, resolve)
+  );
+}
+
+async function getSpreadsheetId() {
+  return new Promise(resolve =>
+    chrome.storage.local.get('spreadsheetId', r => resolve(r.spreadsheetId || null))
+  );
+}
+
+async function saveSpreadsheetId(id) {
+  return new Promise(resolve =>
+    chrome.storage.local.set({ spreadsheetId: id }, resolve)
+  );
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { getApiKey, saveApiKey, getModelName, saveModelName };
+  module.exports = {
+    getApiKey, saveApiKey, getModelName, saveModelName,
+    getClientId, saveClientId, getClientSecret, saveClientSecret,
+    getSpreadsheetId, saveSpreadsheetId
+  };
 }

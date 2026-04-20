@@ -22,16 +22,48 @@ async function init() {
 }
 
 async function loadSettings() {
-  const [key, model, scriptUrl] = await Promise.all([getApiKey(), getModelName(), getAppsScriptUrl()]);
-  if (key)       document.getElementById('apiKeyInput').value       = key;
-  if (model)     document.getElementById('modelNameInput').value    = model;
-  if (scriptUrl) document.getElementById('appsScriptUrlInput').value = scriptUrl;
+  const [key, model, clientId, clientSecret, spreadsheetId] = await Promise.all([
+    getApiKey(), getModelName(), getClientId(), getClientSecret(), getSpreadsheetId()
+  ]);
+  if (key)           document.getElementById('apiKeyInput').value          = key;
+  if (model)         document.getElementById('modelNameInput').value       = model;
+  if (clientId)      document.getElementById('clientIdInput').value        = clientId;
+  if (clientSecret)  document.getElementById('clientSecretInput').value    = clientSecret;
+  if (spreadsheetId) document.getElementById('spreadsheetIdInput').value   = spreadsheetId;
+
+  document.getElementById('redirectUriDisplay').value = getRedirectUri();
+  await updateAuthStatus();
+}
+
+async function updateAuthStatus() {
+  const connected     = await isConnected();
+  const statusEl      = document.getElementById('authStatus');
+  const connectBtn    = document.getElementById('connectGoogleBtn');
+  const disconnectBtn = document.getElementById('disconnectGoogleBtn');
+
+  if (connected) {
+    statusEl.textContent = '✅ Google 계정 연결됨';
+    statusEl.className   = 'auth-status auth-connected';
+    connectBtn.classList.add('hidden');
+    disconnectBtn.classList.remove('hidden');
+  } else {
+    statusEl.textContent = '❌ Google 계정 미연결';
+    statusEl.className   = 'auth-status auth-disconnected';
+    connectBtn.classList.remove('hidden');
+    disconnectBtn.classList.add('hidden');
+  }
 }
 
 async function loadPositions() {
   const select = document.getElementById('positionSelect');
-  select.innerHTML = '<option value="">로딩 중...</option>';
 
+  const connected = await isConnected();
+  if (!connected) {
+    select.innerHTML = '<option value="">-- 포지션을 선택하세요 --</option>';
+    return;
+  }
+
+  select.innerHTML = '<option value="">로딩 중...</option>';
   try {
     state.positions = await fetchPositions();
     renderPositionDropdown();
@@ -92,11 +124,54 @@ function bindEvents() {
     await saveModelName(v);
     showMessage(document.getElementById('settingsPanel'), `모델: ${v}`, 'success');
   });
-  document.getElementById('saveAppsScriptBtn').addEventListener('click', async () => {
-    const v = document.getElementById('appsScriptUrlInput').value.trim();
+  document.getElementById('saveSpreadsheetIdBtn').addEventListener('click', async () => {
+    const v = document.getElementById('spreadsheetIdInput').value.trim();
     if (!v) return;
-    await saveAppsScriptUrl(v);
-    showMessage(document.getElementById('settingsPanel'), 'URL 저장됨. 포지션 새로고침 해주세요.', 'success');
+    await saveSpreadsheetId(v);
+    showMessage(document.getElementById('settingsPanel'), 'Spreadsheet ID 저장됨', 'success');
+  });
+  document.getElementById('saveClientIdBtn').addEventListener('click', async () => {
+    const v = document.getElementById('clientIdInput').value.trim();
+    if (!v) return;
+    await saveClientId(v);
+    showMessage(document.getElementById('settingsPanel'), 'Client ID 저장됨', 'success');
+  });
+  document.getElementById('saveClientSecretBtn').addEventListener('click', async () => {
+    const v = document.getElementById('clientSecretInput').value.trim();
+    if (!v) return;
+    await saveClientSecret(v);
+    showMessage(document.getElementById('settingsPanel'), 'Client Secret 저장됨', 'success');
+  });
+  document.getElementById('copyRedirectUriBtn').addEventListener('click', () => {
+    const uri = document.getElementById('redirectUriDisplay').value;
+    navigator.clipboard.writeText(uri).then(() => {
+      showMessage(document.getElementById('settingsPanel'), 'URI 복사됨', 'success');
+    }).catch(() => {
+      document.getElementById('redirectUriDisplay').select();
+    });
+  });
+  document.getElementById('connectGoogleBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('connectGoogleBtn');
+    btn.textContent = '연결 중...';
+    btn.disabled = true;
+    try {
+      await connectGoogleAccount();
+      await updateAuthStatus();
+      showMessage(document.getElementById('settingsPanel'), 'Google 계정 연결 완료!', 'success');
+      setTimeout(() => loadPositions(), 500);
+    } catch (e) {
+      showMessage(document.getElementById('settingsPanel'), '연결 실패: ' + e.message, 'error');
+    } finally {
+      btn.textContent = '🔗 Google 계정 연결';
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('disconnectGoogleBtn').addEventListener('click', async () => {
+    await disconnectGoogleAccount();
+    await updateAuthStatus();
+    state.positions = [];
+    renderPositionDropdown();
+    showMessage(document.getElementById('settingsPanel'), 'Google 계정 연결이 해제되었습니다.', 'success');
   });
 
   // Position
@@ -154,6 +229,7 @@ function bindEvents() {
 // ─── Settings / Close ─────────────────────────────────────────────────────────
 function toggleSettings(show) {
   document.getElementById('settingsPanel').classList.toggle('hidden', !show);
+  if (show) updateAuthStatus();
 }
 
 function handleClose() {
@@ -238,7 +314,6 @@ function showExistingCandidateResult(candidate) {
   try {
     analysis = JSON.parse(candidate.analysis);
   } catch {
-    // 분析내용이 JSON이 아닌 경우 간략 표시
     analysis = {
       probability: parseFloat(candidate.analysis) || 0,
       summary: candidate.analysis,
@@ -253,12 +328,10 @@ function showExistingCandidateResult(candidate) {
 
   renderResults(analysis, candidate.name);
 
-  // 검토결과 처리
   if (candidate.result) {
     showFeedbackDone(candidate.result);
   } else {
     showFeedbackForm();
-    // 검토결과 미입력 시 자동 스크롤
     setTimeout(() => {
       document.getElementById('feedbackSection').scrollIntoView({ behavior: 'smooth' });
     }, 300);
@@ -423,7 +496,7 @@ async function handleAnalyze() {
     renderResults(result, candidateName);
     showFeedbackForm();
   } catch (e) {
-    showGlobalError('분석 실패: ' + e.message);
+    showGlobalError('분析 실패: ' + e.message);
   } finally {
     setLoading(false);
   }
@@ -432,7 +505,7 @@ async function handleAnalyze() {
 function setLoading(on) {
   document.getElementById('analyzeBtn').disabled = on;
   document.getElementById('loadingSpinner').classList.toggle('hidden', !on);
-  document.getElementById('analyzeBtn').textContent = on ? '분석 중...' : '🔍 분석 시작';
+  document.getElementById('analyzeBtn').textContent = on ? '분析 중...' : '🔍 분析 시작';
 }
 
 // ─── Results ──────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@
   "description": "AI-powered resume screening assistant with learning capabilities",
   "permissions": [
     "activeTab",
+    "identity",
     "scripting",
     "storage",
     "tabs",
