@@ -1,59 +1,68 @@
-// popup.js - Side panel controller
+// popup.js
 
 const state = {
-  requirements: [],
-  selectedRequirement: null,
-  captures: [],
-  selectedText: '',
+  positions:         [],   // [{ searchCode, positionName, jd, preference }]
+  candidates:        [],   // [{ rowIndex, name, date, career, analysis, result }]
+  selectedPosition:  null,
+  selectedCandidate: null, // null = new candidate
+  captures:          [],
+  selectedText:      '',
   selectionModeActive: false,
-  currentAnalysis: null,
-  currentAnalysisId: null,
-  activeTab: 'capture'
+  activeTab:         'capture',
+  currentAnalysis:   null,
+  currentRowIndex:   null  // row in 분析현황 after save
 };
 
-// ─── Init ───────────────────────────────────────────────────────────────────
+// ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
-  await loadRequirements();
-  await loadApiKey();
+  await loadSettings();
+  await loadPositions();
   bindEvents();
   listenForMessages();
 }
 
-async function loadRequirements() {
-  state.requirements = await getRequirements();
-  renderRequirementDropdown();
+async function loadSettings() {
+  const [key, model, scriptUrl] = await Promise.all([getApiKey(), getModelName(), getAppsScriptUrl()]);
+  if (key)       document.getElementById('apiKeyInput').value       = key;
+  if (model)     document.getElementById('modelNameInput').value    = model;
+  if (scriptUrl) document.getElementById('appsScriptUrlInput').value = scriptUrl;
 }
 
-async function loadApiKey() {
-  const key = await getApiKey();
-  if (key) document.getElementById('apiKeyInput').value = key;
-  const model = await getModelName();
-  document.getElementById('modelNameInput').value = model;
+async function loadPositions() {
+  const select = document.getElementById('positionSelect');
+  select.innerHTML = '<option value="">로딩 중...</option>';
+
+  try {
+    state.positions = await fetchPositions();
+    renderPositionDropdown();
+  } catch (e) {
+    select.innerHTML = '<option value="">-- 포지션을 선택하세요 --</option>';
+    showGlobalError(e.message);
+  }
 }
 
-function renderRequirementDropdown() {
-  const select = document.getElementById('requirementSelect');
-  const currentVal = select.value;
-
-  while (select.options.length > 2) select.remove(2);
-
-  state.requirements.forEach(req => {
+function renderPositionDropdown() {
+  const select = document.getElementById('positionSelect');
+  select.innerHTML = '<option value="">-- 포지션을 선택하세요 --</option>';
+  state.positions.forEach(p => {
     const opt = document.createElement('option');
-    opt.value = req.id;
-    opt.textContent = req.name;
-    select.insertBefore(opt, select.options[select.options.length - 1]);
+    opt.value = p.searchCode;
+    opt.textContent = `[${p.searchCode}] ${p.positionName}`;
+    select.appendChild(opt);
   });
-
-  if (currentVal) select.value = currentVal;
 }
 
-// ─── Listen for content script messages ──────────────────────────────────────
+// ─── Message listener (from content script) ───────────────────────────────────
 function listenForMessages() {
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener(msg => {
     if (msg.type === 'TEXT_SELECTED') {
       state.selectedText = msg.text;
       state.selectionModeActive = false;
-      showSelectionResult(msg.text);
+      document.getElementById('selectionActive').classList.add('hidden');
+      document.getElementById('selectionIdle').classList.remove('hidden');
+      document.getElementById('selectionText').textContent = msg.text;
+      document.getElementById('selectionPreview').classList.remove('hidden');
+      updateAnalyzeButton();
     } else if (msg.type === 'SELECTION_CANCELLED') {
       state.selectionModeActive = false;
       document.getElementById('selectionActive').classList.add('hidden');
@@ -62,7 +71,7 @@ function listenForMessages() {
   });
 }
 
-// ─── Event Binding ────────────────────────────────────────────────────────────
+// ─── Event binding ────────────────────────────────────────────────────────────
 function bindEvents() {
   // Header
   document.getElementById('settingsBtn').addEventListener('click', () => toggleSettings(true));
@@ -70,28 +79,45 @@ function bindEvents() {
 
   // Settings
   document.getElementById('closeSettingsBtn').addEventListener('click', () => toggleSettings(false));
-  document.getElementById('saveApiKeyBtn').addEventListener('click', handleSaveApiKey);
-  document.getElementById('saveModelBtn').addEventListener('click', handleSaveModel);
+  document.getElementById('saveApiKeyBtn').addEventListener('click', async () => {
+    const v = document.getElementById('apiKeyInput').value.trim();
+    if (!v) return;
+    await saveApiKey(v);
+    showMessage(document.getElementById('settingsPanel'), 'API 키 저장됨', 'success');
+    setTimeout(() => toggleSettings(false), 800);
+  });
+  document.getElementById('saveModelBtn').addEventListener('click', async () => {
+    const v = document.getElementById('modelNameInput').value.trim();
+    if (!v) return;
+    await saveModelName(v);
+    showMessage(document.getElementById('settingsPanel'), `모델: ${v}`, 'success');
+  });
+  document.getElementById('saveAppsScriptBtn').addEventListener('click', async () => {
+    const v = document.getElementById('appsScriptUrlInput').value.trim();
+    if (!v) return;
+    await saveAppsScriptUrl(v);
+    showMessage(document.getElementById('settingsPanel'), 'URL 저장됨. 포지션 새로고침 해주세요.', 'success');
+  });
 
-  // Requirements
-  document.getElementById('requirementSelect').addEventListener('change', handleRequirementSelect);
-  document.getElementById('saveNewReqBtn').addEventListener('click', handleSaveNewRequirement);
-  document.getElementById('cancelNewReqBtn').addEventListener('click', () => {
-    document.getElementById('newReqForm').classList.add('hidden');
-    document.getElementById('requirementSelect').value = '';
-    state.selectedRequirement = null;
-    updateAnalyzeButton();
+  // Position
+  document.getElementById('positionSelect').addEventListener('change', handlePositionSelect);
+  document.getElementById('refreshPositionsBtn').addEventListener('click', loadPositions);
+
+  // Candidate
+  document.getElementById('candidateSelect').addEventListener('change', handleCandidateSelect);
+
+  // JD toggle
+  document.getElementById('toggleJdBtn').addEventListener('click', () => {
+    const content = document.getElementById('jdContent');
+    const btn = document.getElementById('toggleJdBtn');
+    const hidden = content.classList.toggle('hidden');
+    btn.textContent = hidden ? '📋 JD 내용 보기 ▾' : '📋 JD 내용 접기 ▴';
   });
-  document.getElementById('saveEditReqBtn').addEventListener('click', handleSaveEditRequirement);
-  document.getElementById('cancelEditReqBtn').addEventListener('click', () => {
-    document.getElementById('editReqForm').classList.add('hidden');
-  });
-  document.getElementById('deleteReqBtn').addEventListener('click', handleDeleteRequirement);
 
   // Tabs
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-  });
+  document.querySelectorAll('.tab-btn').forEach(btn =>
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+  );
 
   // Capture
   document.getElementById('captureBtn').addEventListener('click', handleCapture);
@@ -104,7 +130,7 @@ function bindEvents() {
   document.getElementById('clearSelectionBtn').addEventListener('click', clearSelection);
 
   // Paste
-  document.getElementById('pasteTextInput').addEventListener('input', (e) => {
+  document.getElementById('pasteTextInput').addEventListener('input', e => {
     document.getElementById('pasteCharCount').textContent = e.target.value.length + '자';
     updateAnalyzeButton();
   });
@@ -118,148 +144,139 @@ function bindEvents() {
   document.getElementById('analyzeBtn').addEventListener('click', handleAnalyze);
 
   // Feedback
-  document.getElementById('feedbackPassBtn').addEventListener('click', () => handleFeedback('pass'));
-  document.getElementById('feedbackFailBtn').addEventListener('click', () => handleFeedback('fail'));
+  document.getElementById('feedbackPassBtn').addEventListener('click', () => handleFeedback('합격'));
+  document.getElementById('feedbackFailBtn').addEventListener('click', () => handleFeedback('불합격'));
 
-  // History
-  document.getElementById('viewHistoryBtn').addEventListener('click', showHistory);
-  document.getElementById('closeHistoryBtn').addEventListener('click', () => {
-    document.getElementById('historySection').classList.add('hidden');
-    document.getElementById('resultsSection').classList.remove('hidden');
-  });
+  // Candidate name input
+  document.getElementById('candidateNameInput').addEventListener('input', updateAnalyzeButton);
 }
 
-// ─── Header ───────────────────────────────────────────────────────────────────
-function handleClose() {
-  // Cancel any active selection mode first
-  if (state.selectionModeActive) handleCancelSelection();
-  window.close();
-}
-
-// ─── Settings ─────────────────────────────────────────────────────────────────
+// ─── Settings / Close ─────────────────────────────────────────────────────────
 function toggleSettings(show) {
   document.getElementById('settingsPanel').classList.toggle('hidden', !show);
 }
 
-async function handleSaveApiKey() {
-  const key = document.getElementById('apiKeyInput').value.trim();
-  if (!key) return showMessage(document.getElementById('settingsPanel'), 'API 키를 입력하세요.', 'error');
-  await saveApiKey(key);
-  showMessage(document.getElementById('settingsPanel'), 'API 키가 저장되었습니다.', 'success');
-  setTimeout(() => toggleSettings(false), 1000);
+function handleClose() {
+  if (state.selectionModeActive) handleCancelSelection();
+  window.close();
 }
 
-async function handleSaveModel() {
-  const name = document.getElementById('modelNameInput').value.trim();
-  if (!name) return showMessage(document.getElementById('settingsPanel'), '모델명을 입력하세요.', 'error');
-  await saveModelName(name);
-  showMessage(document.getElementById('settingsPanel'), `모델이 "${name}"으로 저장되었습니다.`, 'success');
+// ─── Position ─────────────────────────────────────────────────────────────────
+async function handlePositionSelect() {
+  const code = document.getElementById('positionSelect').value;
+  state.selectedPosition = state.positions.find(p => p.searchCode === code) || null;
+  state.candidates = [];
+  state.selectedCandidate = null;
+  state.currentAnalysis = null;
+  state.currentRowIndex = null;
+
+  // Reset UI
+  document.getElementById('candidateRow').classList.add('hidden');
+  document.getElementById('newCandidateRow').classList.add('hidden');
+  document.getElementById('positionPreview').classList.add('hidden');
+  document.getElementById('resumeSection').style.display = 'none';
+  document.getElementById('analyzeContainer').style.display = 'none';
+  document.getElementById('resultsSection').classList.add('hidden');
+  document.getElementById('jdContent').classList.add('hidden');
+  document.getElementById('toggleJdBtn').textContent = '📋 JD 내용 보기 ▾';
+
+  if (!state.selectedPosition) return;
+
+  // Show JD preview
+  const jdText = [state.selectedPosition.jd, state.selectedPosition.preference]
+    .filter(Boolean).join('\n\n[선호 조건]\n');
+  document.getElementById('jdContent').textContent = jdText;
+  document.getElementById('positionPreview').classList.remove('hidden');
+
+  // Load candidates
+  try {
+    state.candidates = await fetchCandidates(code);
+  } catch (e) {
+    showGlobalError('후보자 로딩 실패: ' + e.message);
+  }
+
+  renderCandidateDropdown();
+  document.getElementById('candidateRow').classList.remove('hidden');
+  // Trigger selection handler for default (__new__)
+  handleCandidateSelect();
 }
 
-// ─── Requirements ─────────────────────────────────────────────────────────────
-function handleRequirementSelect() {
-  const val = document.getElementById('requirementSelect').value;
-  document.getElementById('newReqForm').classList.add('hidden');
-  document.getElementById('editReqForm').classList.add('hidden');
-  document.getElementById('deleteReqBtn').classList.add('hidden');
+function renderCandidateDropdown() {
+  const select = document.getElementById('candidateSelect');
+  select.innerHTML = '<option value="__new__">+ 신규 지원자</option>';
+  state.candidates.forEach((c, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    const resultMark = c.result ? (c.result.startsWith('합격') ? ' ✓' : ' ✗') : ' ⏳';
+    opt.textContent = `${c.name} (${c.date})${resultMark}`;
+    select.appendChild(opt);
+  });
+}
+
+// ─── Candidate ────────────────────────────────────────────────────────────────
+function handleCandidateSelect() {
+  const val = document.getElementById('candidateSelect').value;
+  document.getElementById('resultsSection').classList.add('hidden');
 
   if (val === '__new__') {
-    document.getElementById('newReqForm').classList.remove('hidden');
-    document.getElementById('reqNameInput').focus();
-    state.selectedRequirement = null;
-  } else if (val) {
-    const req = state.requirements.find(r => r.id === val);
-    if (req) {
-      state.selectedRequirement = req;
-      document.getElementById('editReqNameInput').value = req.name;
-      document.getElementById('editReqContentInput').value = req.content;
-      document.getElementById('editReqForm').classList.remove('hidden');
-      document.getElementById('deleteReqBtn').classList.remove('hidden');
-      renderReqStats(req);
-    }
+    state.selectedCandidate = null;
+    document.getElementById('newCandidateRow').classList.remove('hidden');
+    document.getElementById('resumeSection').style.display = '';
+    document.getElementById('analyzeContainer').style.display = '';
+    updateAnalyzeButton();
   } else {
-    state.selectedRequirement = null;
+    state.selectedCandidate = state.candidates[Number(val)];
+    document.getElementById('newCandidateRow').classList.add('hidden');
+    document.getElementById('resumeSection').style.display = 'none';
+    document.getElementById('analyzeContainer').style.display = 'none';
+    showExistingCandidateResult(state.selectedCandidate);
   }
-  updateAnalyzeButton();
 }
 
-function renderReqStats(req) {
-  const history = req.analysisHistory || [];
-  const pass = history.filter(h => h.feedback === 'pass').length;
-  const fail = history.filter(h => h.feedback === 'fail').length;
-  document.getElementById('reqStats').textContent =
-    `분석 ${history.length}건 · 합격 ${pass}건 · 불합격 ${fail}건`;
-}
+function showExistingCandidateResult(candidate) {
+  let analysis;
+  try {
+    analysis = JSON.parse(candidate.analysis);
+  } catch {
+    // 분析내용이 JSON이 아닌 경우 간략 표시
+    analysis = {
+      probability: parseFloat(candidate.analysis) || 0,
+      summary: candidate.analysis,
+      careerSummary: candidate.career,
+      strengths: [], weaknesses: [], keyMatches: [],
+      recommendation: ''
+    };
+  }
 
-async function handleSaveNewRequirement() {
-  const name = document.getElementById('reqNameInput').value.trim();
-  const content = document.getElementById('reqContentInput').value.trim();
-  if (!name || !content) return showMessage(document.getElementById('newReqForm'), '포지션명과 요구사항을 모두 입력하세요.', 'error');
+  state.currentAnalysis = analysis;
+  state.currentRowIndex = candidate.rowIndex;
 
-  const saved = await saveRequirement({ name, content });
-  state.requirements.push(saved);
-  renderRequirementDropdown();
+  renderResults(analysis, candidate.name);
 
-  document.getElementById('requirementSelect').value = saved.id;
-  state.selectedRequirement = saved;
-  document.getElementById('newReqForm').classList.add('hidden');
-  document.getElementById('editReqNameInput').value = name;
-  document.getElementById('editReqContentInput').value = content;
-  document.getElementById('editReqForm').classList.remove('hidden');
-  document.getElementById('deleteReqBtn').classList.remove('hidden');
-  renderReqStats(saved);
-  updateAnalyzeButton();
-}
-
-async function handleSaveEditRequirement() {
-  if (!state.selectedRequirement) return;
-  const name = document.getElementById('editReqNameInput').value.trim();
-  const content = document.getElementById('editReqContentInput').value.trim();
-  if (!name || !content) return showMessage(document.getElementById('editReqForm'), '포지션명과 요구사항을 모두 입력하세요.', 'error');
-
-  const updated = await updateRequirement(state.selectedRequirement.id, { name, content });
-  const index = state.requirements.findIndex(r => r.id === updated.id);
-  if (index !== -1) state.requirements[index] = updated;
-  state.selectedRequirement = updated;
-  renderRequirementDropdown();
-  document.getElementById('requirementSelect').value = updated.id;
-  showMessage(document.getElementById('editReqForm'), '저장되었습니다.', 'success');
-}
-
-async function handleDeleteRequirement() {
-  if (!state.selectedRequirement) return;
-  if (!confirm(`"${state.selectedRequirement.name}" 요구사항을 삭제하시겠습니까?\n모든 분석 이력도 함께 삭제됩니다.`)) return;
-
-  await deleteRequirement(state.selectedRequirement.id);
-  state.requirements = state.requirements.filter(r => r.id !== state.selectedRequirement.id);
-  state.selectedRequirement = null;
-  renderRequirementDropdown();
-  document.getElementById('requirementSelect').value = '';
-  document.getElementById('editReqForm').classList.add('hidden');
-  document.getElementById('deleteReqBtn').classList.add('hidden');
-  updateAnalyzeButton();
+  // 검토결과 처리
+  if (candidate.result) {
+    showFeedbackDone(candidate.result);
+  } else {
+    showFeedbackForm();
+    // 검토결과 미입력 시 자동 스크롤
+    setTimeout(() => {
+      document.getElementById('feedbackSection').scrollIntoView({ behavior: 'smooth' });
+    }, 300);
+  }
 }
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
-  // Cancel selection mode if switching away
   if (state.activeTab === 'selection' && tab !== 'selection' && state.selectionModeActive) {
     handleCancelSelection();
   }
-
   state.activeTab = tab;
-
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(c => {
+    const active = c.id === tab + 'Tab';
+    c.classList.toggle('active', active);
+    c.classList.toggle('hidden', !active);
   });
-
-  // Toggle both active and hidden properly (hidden has !important so must be removed)
-  document.querySelectorAll('.tab-content').forEach(content => {
-    const isActive = content.id === tab + 'Tab';
-    content.classList.toggle('active', isActive);
-    content.classList.toggle('hidden', !isActive);
-  });
-
   updateAnalyzeButton();
 }
 
@@ -277,45 +294,21 @@ async function handleCapture() {
 async function handleScrollCapture() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
     const [{ result: dims }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => ({
-        scrollHeight: document.documentElement.scrollHeight,
-        clientHeight: document.documentElement.clientHeight,
-        scrollTop: window.scrollY
-      })
+      func: () => ({ scrollHeight: document.documentElement.scrollHeight, clientHeight: document.documentElement.clientHeight, scrollTop: window.scrollY })
     });
-
-    // Scroll to top
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => window.scrollTo(0, 0)
-    });
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => window.scrollTo(0, 0) });
     await sleep(400);
-
-    let scrollPos = 0;
+    let pos = 0;
     while (true) {
-      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
-      addCapture(dataUrl);
-
-      scrollPos += dims.clientHeight * 0.85; // 15% overlap for continuity
-      if (scrollPos >= dims.scrollHeight) break;
-
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (pos) => window.scrollTo(0, pos),
-        args: [scrollPos]
-      });
+      addCapture(await chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' }));
+      pos += dims.clientHeight * 0.85;
+      if (pos >= dims.scrollHeight) break;
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: p => window.scrollTo(0, p), args: [pos] });
       await sleep(500);
     }
-
-    // Restore scroll
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (pos) => window.scrollTo(0, pos),
-      args: [dims.scrollTop]
-    });
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: p => window.scrollTo(0, p), args: [dims.scrollTop] });
   } catch (e) {
     showMessage(document.getElementById('captureTab'), '스크롤 캡처 실패: ' + e.message, 'error');
   }
@@ -324,10 +317,8 @@ async function handleScrollCapture() {
 function addCapture(dataUrl) {
   state.captures.push(dataUrl);
   document.getElementById('captureCount').textContent = state.captures.length;
-
   const img = document.createElement('img');
-  img.src = dataUrl;
-  img.className = 'capture-thumb';
+  img.src = dataUrl; img.className = 'capture-thumb';
   document.getElementById('captureList').appendChild(img);
   document.getElementById('capturePreview').classList.remove('hidden');
   updateAnalyzeButton();
@@ -345,13 +336,8 @@ function clearCaptures() {
 async function handleStartSelection() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ['content/content.js']
-    }).catch(() => {}); // already injected is fine
-
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/content.js'] }).catch(() => {});
     await chrome.tabs.sendMessage(tab.id, { type: 'ENABLE_SELECTION_MODE' });
-
     state.selectionModeActive = true;
     document.getElementById('selectionIdle').classList.add('hidden');
     document.getElementById('selectionActive').classList.remove('hidden');
@@ -371,14 +357,6 @@ async function handleCancelSelection() {
   document.getElementById('selectionIdle').classList.remove('hidden');
 }
 
-function showSelectionResult(text) {
-  document.getElementById('selectionActive').classList.add('hidden');
-  document.getElementById('selectionIdle').classList.remove('hidden');
-  document.getElementById('selectionText').textContent = text;
-  document.getElementById('selectionPreview').classList.remove('hidden');
-  updateAnalyzeButton();
-}
-
 function clearSelection() {
   state.selectedText = '';
   document.getElementById('selectionText').textContent = '';
@@ -388,22 +366,24 @@ function clearSelection() {
 
 // ─── Analyze ──────────────────────────────────────────────────────────────────
 function updateAnalyzeButton() {
-  const hasReq = !!state.selectedRequirement;
-  const hasContent =
-    (state.activeTab === 'capture' && state.captures.length > 0) ||
-    (state.activeTab === 'selection' && state.selectedText) ||
-    (state.activeTab === 'paste' && document.getElementById('pasteTextInput').value.trim());
-
-  document.getElementById('analyzeBtn').disabled = !(hasReq && hasContent);
+  const hasPosition = !!state.selectedPosition;
+  const hasName     = document.getElementById('candidateNameInput').value.trim().length > 0;
+  const hasContent  =
+    (state.activeTab === 'capture'    && state.captures.length > 0) ||
+    (state.activeTab === 'selection'  && state.selectedText)        ||
+    (state.activeTab === 'paste'      && document.getElementById('pasteTextInput').value.trim());
+  document.getElementById('analyzeBtn').disabled = !(hasPosition && hasName && hasContent);
 }
 
 async function handleAnalyze() {
   const apiKey = await getApiKey();
   if (!apiKey) {
-    showMessage(document.getElementById('analyzeContainer'), 'API 키를 먼저 설정하세요. (⚙️ 설정)', 'error');
+    showGlobalError('API 키를 설정에서 입력하세요.');
+    toggleSettings(true);
     return;
   }
 
+  const candidateName = document.getElementById('candidateNameInput').value.trim();
   setLoading(true);
 
   try {
@@ -411,39 +391,39 @@ async function handleAnalyze() {
     let resumeText = '';
 
     if (state.activeTab === 'capture') {
-      const base64Images = state.captures.map(d => d.split(',')[1]);
-      result = await analyzeResumeFromImage(apiKey, state.selectedRequirement, base64Images);
+      const images = state.captures.map(d => d.split(',')[1]);
+      result = await analyzeResumeFromImage(apiKey, state.selectedPosition, images, state.candidates);
       resumeText = result.extractedText || '[이미지 캡처]';
     } else if (state.activeTab === 'selection') {
       resumeText = state.selectedText;
-      result = await analyzeResume(apiKey, state.selectedRequirement, resumeText);
+      result = await analyzeResume(apiKey, state.selectedPosition, resumeText, state.candidates);
     } else {
       resumeText = document.getElementById('pasteTextInput').value.trim();
-      result = await analyzeResume(apiKey, state.selectedRequirement, resumeText);
+      result = await analyzeResume(apiKey, state.selectedPosition, resumeText, state.candidates);
     }
 
-    // Save to history
-    const { analysis } = await addAnalysisResult(state.selectedRequirement.id, {
-      resumeText,
-      probability: result.probability,
-      reasoning: result.summary,
-      strengths: result.strengths,
-      weaknesses: result.weaknesses,
-      captureMethod: state.activeTab
+    // 시트에 저장
+    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const saved = await addCandidateRecord({
+      searchCode: state.selectedPosition.searchCode,
+      name:       candidateName,
+      date:       today,
+      career:     result.careerSummary || '',
+      analysis:   JSON.stringify(result),
+      result:     ''
     });
 
-    // Refresh local state
-    const reqs = await getRequirements();
-    state.selectedRequirement = reqs.find(r => r.id === state.selectedRequirement.id);
-    const idx = state.requirements.findIndex(r => r.id === state.selectedRequirement.id);
-    if (idx !== -1) state.requirements[idx] = state.selectedRequirement;
-    renderReqStats(state.selectedRequirement);
-
     state.currentAnalysis = result;
-    state.currentAnalysisId = analysis.id;
-    renderResults(result);
+    state.currentRowIndex = saved.rowIndex;
+
+    // 후보자 목록 갱신
+    state.candidates = await fetchCandidates(state.selectedPosition.searchCode);
+    renderCandidateDropdown();
+
+    renderResults(result, candidateName);
+    showFeedbackForm();
   } catch (e) {
-    showMessage(document.getElementById('analyzeContainer'), '분석 실패: ' + e.message, 'error');
+    showGlobalError('분석 실패: ' + e.message);
   } finally {
     setLoading(false);
   }
@@ -456,129 +436,125 @@ function setLoading(on) {
 }
 
 // ─── Results ──────────────────────────────────────────────────────────────────
-function renderResults(result) {
-  const prob = Math.min(100, Math.max(0, result.probability));
+function renderResults(result, candidateName) {
+  const prob = Math.min(100, Math.max(0, result.probability || 0));
 
   document.getElementById('gaugeBar').style.width = prob + '%';
   document.getElementById('probabilityValue').textContent = prob + '%';
+  document.getElementById('gaugeBar').style.background =
+    prob >= 70 ? 'linear-gradient(to right,#0ca678,#2f9e44)' :
+    prob >= 40 ? 'linear-gradient(to right,#fd7e14,#e8b400)' :
+                 'linear-gradient(to right,#e03131,#fd7e14)';
 
-  if (prob >= 70) {
-    document.getElementById('gaugeBar').style.background = 'linear-gradient(to right, #0ca678, #2f9e44)';
-  } else if (prob >= 40) {
-    document.getElementById('gaugeBar').style.background = 'linear-gradient(to right, #fd7e14, #e8b400)';
-  } else {
-    document.getElementById('gaugeBar').style.background = 'linear-gradient(to right, #e03131, #fd7e14)';
-  }
-
+  // Recommendation badge
   const badge = document.getElementById('recommendationBadge');
   badge.textContent = result.recommendation || '';
   badge.className = 'recommendation-badge';
-  if (result.recommendation?.includes('권고') && !result.recommendation?.includes('비')) {
+  if ((result.recommendation || '').includes('권고') && !(result.recommendation || '').includes('비'))
     badge.classList.add('recommend');
-  } else if (result.recommendation?.includes('보류')) {
+  else if ((result.recommendation || '').includes('보류'))
     badge.classList.add('hold');
-  } else {
+  else if (result.recommendation)
     badge.classList.add('no-recommend');
-  }
+
+  // Candidate name badge
+  document.getElementById('resultCandidateName').textContent = candidateName || '';
+
+  // Career summary
+  const career = result.careerSummary || '';
+  document.getElementById('careerSummaryText').textContent = career;
+  document.getElementById('careerSummaryBlock').style.display = career ? '' : 'none';
 
   document.getElementById('resultSummary').textContent = result.summary || '';
 
-  document.getElementById('strengthsList').innerHTML = (result.strengths || [])
-    .map(s => `<li>${escapeHtml(s)}</li>`).join('');
+  document.getElementById('strengthsList').innerHTML =
+    (result.strengths || []).map(s => `<li>${escapeHtml(s)}</li>`).join('');
+  document.getElementById('weaknessesList').innerHTML =
+    (result.weaknesses || []).map(w => `<li>${escapeHtml(w)}</li>`).join('');
 
-  document.getElementById('weaknessesList').innerHTML = (result.weaknesses || [])
-    .map(w => `<li>${escapeHtml(w)}</li>`).join('');
-
-  document.getElementById('keyMatchesList').innerHTML = (result.keyMatches || []).map(m => `
-    <div class="match-item ${m.matched ? 'matched' : 'unmatched'}">
-      <span class="match-icon">${m.matched ? '✅' : '❌'}</span>
-      <div class="match-content">
-        <div class="match-req">${escapeHtml(m.requirement)}</div>
-        <div class="match-detail">${escapeHtml(m.detail || '')}</div>
-      </div>
-    </div>
-  `).join('');
-
-  document.getElementById('feedbackPassBtn').classList.remove('active');
-  document.getElementById('feedbackFailBtn').classList.remove('active');
-  document.getElementById('feedbackConfirm').classList.add('hidden');
+  document.getElementById('keyMatchesList').innerHTML =
+    (result.keyMatches || []).map(m => `
+      <div class="match-item ${m.matched ? 'matched' : 'unmatched'}">
+        <span class="match-icon">${m.matched ? '✅' : '❌'}</span>
+        <div class="match-content">
+          <div class="match-req">${escapeHtml(m.requirement)}</div>
+          <div class="match-detail">${escapeHtml(m.detail || '')}</div>
+        </div>
+      </div>`).join('');
 
   document.getElementById('resultsSection').classList.remove('hidden');
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
 }
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
-async function handleFeedback(type) {
-  if (!state.selectedRequirement || !state.currentAnalysisId) return;
-
-  await updateAnalysisFeedback(state.selectedRequirement.id, state.currentAnalysisId, type);
-
-  const reqs = await getRequirements();
-  state.selectedRequirement = reqs.find(r => r.id === state.selectedRequirement.id);
-  const idx = state.requirements.findIndex(r => r.id === state.selectedRequirement.id);
-  if (idx !== -1) state.requirements[idx] = state.selectedRequirement;
-  renderReqStats(state.selectedRequirement);
-
-  document.getElementById('feedbackPassBtn').classList.toggle('active', type === 'pass');
-  document.getElementById('feedbackFailBtn').classList.toggle('active', type === 'fail');
-
-  const label = type === 'pass' ? '합격' : '불합격';
-  const confirm = document.getElementById('feedbackConfirm');
-  confirm.textContent = `${label}으로 기록되었습니다. 다음 분석에 반영됩니다.`;
-  confirm.classList.remove('hidden');
+function showFeedbackForm() {
+  document.getElementById('feedbackSection').classList.remove('hidden');
+  document.getElementById('feedbackDone').classList.add('hidden');
+  document.getElementById('resultReasonInput').value = '';
+  document.getElementById('feedbackPassBtn').classList.remove('active');
+  document.getElementById('feedbackFailBtn').classList.remove('active');
+  document.getElementById('feedbackConfirm').classList.add('hidden');
 }
 
-// ─── History ──────────────────────────────────────────────────────────────────
-async function showHistory() {
-  if (!state.selectedRequirement) return;
-  const req = state.requirements.find(r => r.id === state.selectedRequirement.id);
-  const history = [...(req?.analysisHistory || [])].reverse();
+function showFeedbackDone(resultText) {
+  document.getElementById('feedbackSection').classList.add('hidden');
+  document.getElementById('feedbackDone').classList.remove('hidden');
+  const isPass = resultText.startsWith('합격');
+  const el = document.getElementById('feedbackDoneText');
+  el.className = 'feedback-done-text ' + (isPass ? 'pass' : 'fail');
+  el.textContent = resultText;
+}
 
-  document.getElementById('historyList').innerHTML = history.length === 0
-    ? '<p style="text-align:center;color:#868e96;font-size:12px;padding:20px">분석 이력이 없습니다.</p>'
-    : history.map(h => {
-        const date = new Date(h.timestamp).toLocaleDateString('ko-KR', {
-          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-        });
-        const feedbackLabel = h.feedback === 'pass' ? '합격' : h.feedback === 'fail' ? '불합격' : '미입력';
-        return `
-          <div class="history-item">
-            <div class="history-header">
-              <span class="history-prob">${h.probability}%</span>
-              <span class="history-feedback ${h.feedback}">${feedbackLabel}</span>
-            </div>
-            <div class="history-date">${date}</div>
-            <div class="history-summary">${escapeHtml(h.reasoning || '')}</div>
-          </div>
-        `;
-      }).join('');
+async function handleFeedback(type) {
+  const reason = document.getElementById('resultReasonInput').value.trim();
+  if (!reason) {
+    document.getElementById('resultReasonInput').focus();
+    document.getElementById('resultReasonInput').style.borderColor = '#e03131';
+    setTimeout(() => document.getElementById('resultReasonInput').style.borderColor = '', 2000);
+    showMessage(document.getElementById('feedbackSection'), '사유를 먼저 입력해주세요.', 'error');
+    return;
+  }
 
-  document.getElementById('historySection').classList.remove('hidden');
-  document.getElementById('resultsSection').classList.add('hidden');
+  const resultText = `${type} - 사유: ${reason}`;
+
+  try {
+    await updateCandidateResult(state.currentRowIndex, resultText);
+
+    // 후보자 목록 갱신
+    state.candidates = await fetchCandidates(state.selectedPosition.searchCode);
+    renderCandidateDropdown();
+
+    document.getElementById('feedbackPassBtn').classList.toggle('active', type === '합격');
+    document.getElementById('feedbackFailBtn').classList.toggle('active', type === '불합격');
+    const confirm = document.getElementById('feedbackConfirm');
+    confirm.textContent = `${resultText} — 시트에 저장되었습니다.`;
+    confirm.classList.remove('hidden');
+
+    setTimeout(() => showFeedbackDone(resultText), 1500);
+  } catch (e) {
+    showMessage(document.getElementById('feedbackSection'), '저장 실패: ' + e.message, 'error');
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function showMessage(container, text, type) {
-  const existing = container.querySelector('.error-msg, .success-msg');
-  if (existing) existing.remove();
+function showGlobalError(msg) {
+  showMessage(document.getElementById('mainContent'), msg, 'error');
+}
 
+function showMessage(container, text, type) {
+  const existing = container.querySelector('.error-msg,.success-msg');
+  if (existing) existing.remove();
   const el = document.createElement('div');
   el.className = type === 'error' ? 'error-msg' : 'success-msg';
   el.textContent = text;
-  container.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  container.prepend(el);
+  setTimeout(() => el.remove(), 4000);
 }
 
 function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 document.addEventListener('DOMContentLoaded', init);
