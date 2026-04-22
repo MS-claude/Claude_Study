@@ -22,16 +22,13 @@ async function init() {
 }
 
 async function loadSettings() {
-  const [key, model, clientId, clientSecret, spreadsheetId] = await Promise.all([
-    getApiKey(), getModelName(), getClientId(), getClientSecret(), getSpreadsheetId()
+  const [key, model, spreadsheetId] = await Promise.all([
+    getApiKey(), getModelName(), getSpreadsheetId()
   ]);
-  if (key)           document.getElementById('apiKeyInput').value          = key;
-  if (model)         document.getElementById('modelNameInput').value       = model;
-  if (clientId)      document.getElementById('clientIdInput').value        = clientId;
-  if (clientSecret)  document.getElementById('clientSecretInput').value    = clientSecret;
-  if (spreadsheetId) document.getElementById('spreadsheetIdInput').value   = spreadsheetId;
+  if (key)           document.getElementById('apiKeyInput').value        = key;
+  if (model)         document.getElementById('modelNameInput').value     = model;
+  if (spreadsheetId) document.getElementById('spreadsheetIdInput').value = spreadsheetId;
 
-  document.getElementById('redirectUriDisplay').value = getRedirectUri();
   await updateAuthStatus();
 }
 
@@ -129,26 +126,6 @@ function bindEvents() {
     if (!v) return;
     await saveSpreadsheetId(v);
     showMessage(document.getElementById('settingsPanel'), 'Spreadsheet ID 저장됨', 'success');
-  });
-  document.getElementById('saveClientIdBtn').addEventListener('click', async () => {
-    const v = document.getElementById('clientIdInput').value.trim();
-    if (!v) return;
-    await saveClientId(v);
-    showMessage(document.getElementById('settingsPanel'), 'Client ID 저장됨', 'success');
-  });
-  document.getElementById('saveClientSecretBtn').addEventListener('click', async () => {
-    const v = document.getElementById('clientSecretInput').value.trim();
-    if (!v) return;
-    await saveClientSecret(v);
-    showMessage(document.getElementById('settingsPanel'), 'Client Secret 저장됨', 'success');
-  });
-  document.getElementById('copyRedirectUriBtn').addEventListener('click', () => {
-    const uri = document.getElementById('redirectUriDisplay').value;
-    navigator.clipboard.writeText(uri).then(() => {
-      showMessage(document.getElementById('settingsPanel'), 'URI 복사됨', 'success');
-    }).catch(() => {
-      document.getElementById('redirectUriDisplay').select();
-    });
   });
   document.getElementById('connectGoogleBtn').addEventListener('click', async () => {
     const btn = document.getElementById('connectGoogleBtn');
