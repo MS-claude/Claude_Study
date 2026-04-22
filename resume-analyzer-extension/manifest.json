@@ -3,6 +3,7 @@
   "name": "Resume Analyzer",
   "version": "1.2.0",
   "description": "AI-powered resume screening assistant with learning capabilities",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwn9nCeD0jUycoAdV/wyci1T1V3vc0veor7a/zZK7UlMyfZwpQ9EZCaER02/n5hbZgAdsNxeTz/j7iHT0AuNpQzeuj0ttXMr7hIQxmfl65Rk8J79hqXEJIIIdPUd+2Y2dsPKBzyrMu9L48jfp44aS3EXdvcYkoz6ckAR00sVImQ8OavH4QoTj8zOElkB7J2QwfbltPrenuFmiAxhe6SwaUJiT5kzPjVfkx5FFloWXUuEkeXPvDnoeq0K3ufFOBM+nqT/MvLiprXjuPXE8VS7ZceGdLBITLvMOhCjxFUUeLPdFac+ELbD0JtgeHigFa5uFZENRX1lJPm7mftE0paiyMQIDAQAB",
   "permissions": [
     "activeTab",
     "identity",
