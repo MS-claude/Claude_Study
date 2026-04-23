@@ -2,7 +2,7 @@
 
 const SHEETS_BASE    = 'https://sheets.googleapis.com/v4/spreadsheets';
 const SOURCING_SHEET = '소싱포지션';
-const ANALYSIS_SHEET = '분析현황';
+const ANALYSIS_SHEET = '분석현황';
 
 // 0-based column index → A1 letter(s)
 function colLetter(i) {
@@ -92,7 +92,7 @@ async function fetchPositions() {
 }
 
 /**
- * 분析현황 탭에서 특정 포지션의 후보자 목록 조회
+ * 분석현황 탭에서 특정 포지션의 후보자 목록 조회
  * @param {string} searchCode
  * @returns {Promise<Array<{rowIndex, name, date, career, analysis, result}>>}
  */
@@ -116,13 +116,13 @@ async function fetchCandidates(searchCode) {
       name:     String(r[hdr['이름']]     || ''),
       date:     String(r[hdr['서칭일']]   || ''),
       career:   String(r[hdr['주요경력']] || ''),
-      analysis: String(r[hdr['분析내용']] || ''),
+      analysis: String(r[hdr['분석내용']] || ''),
       result:   String(r[hdr['검토결과']] || '')
     }));
 }
 
 /**
- * 분析현황 탭에 새 후보자 기록 추가
+ * 분석현황 탭에 새 후보자 기록 추가
  * @param {Object} data - { searchCode, name, date, career, analysis, result }
  * @returns {Promise<{rowIndex: number}>}
  */
@@ -142,7 +142,7 @@ async function addCandidateRecord(data) {
   set('이름',     data.name);
   set('서칭일',   data.date);
   set('주요경력', data.career);
-  set('분析내용', data.analysis);
+  set('분석내용', data.analysis);
   set('검토결과', data.result || '');
 
   const res = await apiPost(
@@ -150,7 +150,7 @@ async function addCandidateRecord(data) {
     { values: [row] }
   );
 
-  // Parse row number from updatedRange like "'분析현황'!A10:F10"
+  // Parse row number from updatedRange like "'분석현황'!A10:F10"
   const updatedRange = res.updates?.updatedRange || '';
   const match = updatedRange.match(/:([A-Z]+)(\d+)$/);
   const rowIndex = match ? parseInt(match[2]) : null;
@@ -159,7 +159,7 @@ async function addCandidateRecord(data) {
 }
 
 /**
- * 분析현황 탭의 검토결과 컬럼 업데이트
+ * 분석현황 탭의 검토결과 컬럼 업데이트
  * @param {number} rowIndex
  * @param {string} result - "합격 - 사유: ..." | "불합격 - 사유: ..."
  */
