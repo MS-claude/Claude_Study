@@ -130,36 +130,27 @@ async function addCandidateRecord(data) {
   const id = await getSpreadsheetId();
   if (!id) throw new Error('⚙️ 설정에서 Spreadsheet ID를 입력하세요.');
 
-  const hdrData = await apiGet(`/${id}/values/${encRange(ANALYSIS_SHEET, 'A1:Z1')}`);
-  const hdrRow  = (hdrData.values || [[]])[0] || [];
-  const hdr     = makeHeaderMap(hdrRow);
-
-  const maxCol = Object.values(hdr).length ? Math.max(...Object.values(hdr)) : 5;
-  const row    = new Array(Math.max(maxCol + 1, 10)).fill('');
-  const set    = (key, val) => { if (hdr[key] != null) row[hdr[key]] = val || ''; };
-
-  set('서칭코드', data.searchCode);
-  set('이름',     data.name);
-  set('서칭일',   data.date);
-  set('주요경력', data.career);
-  set('분석내용', data.analysis);
-  set('검토결과', data.result || '');
-
-  // G~J열: 가독성 컬럼 (분석 JSON에서 추출)
   let parsed = {};
   try { parsed = JSON.parse(data.analysis || '{}'); } catch {}
 
-  const fmtComma  = s => (s || '').split(',').map(t => t.trim()).filter(Boolean).join('\n');
   const fmtPeriod = s => (s || '').split('.').map(t => t.trim()).filter(Boolean).join('\n');
   const fmtArray  = a => Array.isArray(a) ? a.join('\n') : String(a || '');
 
-  row[6] = fmtComma(parsed.careerSummary);   // G: 주요경력 (줄바꿈)
-  row[7] = fmtPeriod(parsed.summary);         // H: 종합평가 (줄바꿈)
-  row[8] = fmtArray(parsed.strengths);        // I: 강점
-  row[9] = fmtArray(parsed.weaknesses);       // J: 약점
+  // A~I열 고정 구조
+  const row = [
+    data.searchCode || '',       // A: 서칭코드
+    data.name       || '',       // B: 이름
+    data.date       || '',       // C: 서칭일
+    data.career     || '',       // D: 주요경력
+    fmtPeriod(parsed.summary),   // E: 종합평가
+    fmtArray(parsed.strengths),  // F: 강점
+    fmtArray(parsed.weaknesses), // G: 약점
+    data.result     || '',       // H: 검토결과
+    data.analysis   || '',       // I: 분석내용
+  ];
 
   const res = await apiPost(
-    `/${id}/values/${encRange(ANALYSIS_SHEET, 'A:Z')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    `/${id}/values/${encRange(ANALYSIS_SHEET, 'A:I')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { values: [row] }
   );
 
