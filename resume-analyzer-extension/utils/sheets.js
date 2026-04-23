@@ -135,13 +135,29 @@ async function addCandidateRecord(data) {
 
   const fmtPeriod = s => (s || '').split('.').map(t => t.trim()).filter(Boolean).join('\n');
   const fmtArray  = a => Array.isArray(a) ? a.join('\n') : String(a || '');
+  const fmtCareer = career => {
+    const entries = (career || '').split(',').map(t => t.trim()).filter(Boolean);
+    if (entries.length === 0) return '';
+    let totalMonths = 0;
+    for (const e of entries) {
+      const y = e.match(/(\d+)\s*년/);
+      const m = e.match(/(\d+)\s*개월/);
+      totalMonths += (y ? parseInt(y[1]) : 0) * 12 + (m ? parseInt(m[1]) : 0);
+    }
+    const yr = Math.floor(totalMonths / 12);
+    const mo = totalMonths % 12;
+    const total = yr > 0 && mo > 0 ? `${yr}년 ${mo}개월`
+                : yr > 0           ? `${yr}년`
+                : mo > 0           ? `${mo}개월` : '';
+    return (total ? `총 경력 : ${total}\n` : '') + entries.join('\n');
+  };
 
   // A~I열 고정 구조
   const row = [
     data.searchCode || '',       // A: 서칭코드
     data.name       || '',       // B: 이름
     data.date       || '',       // C: 서칭일
-    data.career     || '',       // D: 주요경력
+    fmtCareer(data.career),      // D: 주요경력
     fmtPeriod(parsed.summary),   // E: 종합평가
     fmtArray(parsed.strengths),  // F: 강점
     fmtArray(parsed.weaknesses), // G: 약점
