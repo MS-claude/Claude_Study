@@ -135,7 +135,7 @@ async function addCandidateRecord(data) {
   const hdr     = makeHeaderMap(hdrRow);
 
   const maxCol = Object.values(hdr).length ? Math.max(...Object.values(hdr)) : 5;
-  const row    = new Array(maxCol + 1).fill('');
+  const row    = new Array(Math.max(maxCol + 1, 10)).fill('');
   const set    = (key, val) => { if (hdr[key] != null) row[hdr[key]] = val || ''; };
 
   set('서칭코드', data.searchCode);
@@ -145,12 +145,25 @@ async function addCandidateRecord(data) {
   set('분석내용', data.analysis);
   set('검토결과', data.result || '');
 
+  // G~J열: 가독성 컬럼 (분석 JSON에서 추출)
+  let parsed = {};
+  try { parsed = JSON.parse(data.analysis || '{}'); } catch {}
+
+  const fmtComma  = s => (s || '').split(',').map(t => t.trim()).filter(Boolean).join('\n');
+  const fmtPeriod = s => (s || '').split('.').map(t => t.trim()).filter(Boolean).join('\n');
+  const fmtArray  = a => Array.isArray(a) ? a.join('\n') : String(a || '');
+
+  row[6] = fmtComma(parsed.careerSummary);   // G: 주요경력 (줄바꿈)
+  row[7] = fmtPeriod(parsed.summary);         // H: 종합평가 (줄바꿈)
+  row[8] = fmtArray(parsed.strengths);        // I: 강점
+  row[9] = fmtArray(parsed.weaknesses);       // J: 약점
+
   const res = await apiPost(
     `/${id}/values/${encRange(ANALYSIS_SHEET, 'A:Z')}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { values: [row] }
   );
 
-  // Parse row number from updatedRange like "'분석현황'!A10:F10"
+  // Parse row number from updatedRange like "'분석현황'!A10:J10"
   const updatedRange = res.updates?.updatedRange || '';
   const match = updatedRange.match(/:([A-Z]+)(\d+)$/);
   const rowIndex = match ? parseInt(match[2]) : null;

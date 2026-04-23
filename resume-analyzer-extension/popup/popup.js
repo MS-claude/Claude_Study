@@ -473,7 +473,7 @@ async function handleAnalyze() {
     renderResults(result, candidateName);
     showFeedbackForm();
   } catch (e) {
-    showGlobalError('분析 실패: ' + e.message);
+    showGlobalError('분석 실패: ' + e.message);
   } finally {
     setLoading(false);
   }
@@ -482,7 +482,7 @@ async function handleAnalyze() {
 function setLoading(on) {
   document.getElementById('analyzeBtn').disabled = on;
   document.getElementById('loadingSpinner').classList.toggle('hidden', !on);
-  document.getElementById('analyzeBtn').textContent = on ? '분析 중...' : '🔍 분析 시작';
+  document.getElementById('analyzeBtn').textContent = on ? '분석 중...' : '🔍 분석 시작';
 }
 
 // ─── Results ──────────────────────────────────────────────────────────────────
