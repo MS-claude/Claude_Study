@@ -72,6 +72,8 @@ main { padding: 10px; display: flex; flex-direction: column; gap: 10px; flex: 1;
 /* Form */
 .form-group { margin-bottom: 8px; }
 .form-group label { display: block; font-size: 11px; font-weight: 500; color: #495057; margin-bottom: 3px; }
+.checkbox-label { display: flex; align-items: center; gap: 5px; margin-top: 6px; cursor: pointer; font-size: 11px; color: #495057; font-weight: 500; }
+.checkbox-label input[type="checkbox"] { width: 13px; height: 13px; cursor: pointer; accent-color: #1a56db; }
 .input-field {
   width: 100%; padding: 7px 9px; border: 1px solid #ced4da; border-radius: 6px;
   font-size: 13px; color: #1a1a1a; background: white; transition: border-color 0.15s;

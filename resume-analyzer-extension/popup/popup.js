@@ -1,7 +1,7 @@
 // popup.js
 
 const state = {
-  positions:         [],   // [{ searchCode, positionName, jd, preference }]
+  positions:         [],   // [{ searchCode, positionName, jd, preference, status }]
   candidates:        [],   // [{ rowIndex, name, date, career, analysis, result }]
   selectedPosition:  null,
   selectedCandidate: null, // null = new candidate
@@ -10,7 +10,8 @@ const state = {
   selectionModeActive: false,
   activeTab:         'capture',
   currentAnalysis:   null,
-  currentRowIndex:   null  // row in 분析현황 after save
+  currentRowIndex:   null, // row in 분석현황 after save
+  activeOnly:        false // 진행 중 필터
 };
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -73,7 +74,10 @@ async function loadPositions() {
 function renderPositionDropdown() {
   const select = document.getElementById('positionSelect');
   select.innerHTML = '<option value="">-- 포지션을 선택하세요 --</option>';
-  state.positions.forEach(p => {
+  const list = state.activeOnly
+    ? state.positions.filter(p => p.status === '진행 중')
+    : state.positions;
+  list.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p.searchCode;
     opt.textContent = `[${p.searchCode}] ${p.positionName}`;
@@ -154,6 +158,10 @@ function bindEvents() {
   // Position
   document.getElementById('positionSelect').addEventListener('change', handlePositionSelect);
   document.getElementById('refreshPositionsBtn').addEventListener('click', loadPositions);
+  document.getElementById('activeOnlyCheckbox').addEventListener('change', e => {
+    state.activeOnly = e.target.checked;
+    renderPositionDropdown();
+  });
 
   // Candidate
   document.getElementById('candidateSelect').addEventListener('change', handleCandidateSelect);

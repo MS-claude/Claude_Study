@@ -87,7 +87,8 @@ async function fetchPositions() {
       searchCode:   String(r[SEARCH_CODE_IDX] || ''),
       positionName: hdr['포지션명']  != null ? String(r[hdr['포지션명']]  || '') : '',
       jd:           hdr['JD']        != null ? String(r[hdr['JD']]        || '') : '',
-      preference:   hdr['선호 조건'] != null ? String(r[hdr['선호 조건']] || '') : ''
+      preference:   hdr['선호 조건'] != null ? String(r[hdr['선호 조건']] || '') : '',
+      status:       hdr['진행여부']  != null ? String(r[hdr['진행여부']]  || '') : ''
     }));
 }
 
