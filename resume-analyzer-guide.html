@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Analyzer 확장프로그램 가이드</title>
+  <style>
+    :root {
+      --primary: #1a56db;
+      --primary-light: #e8f0fe;
+      --secondary: #0ca678;
+      --secondary-light: #e6f8f2;
+      --warning: #e3a008;
+      --warning-light: #fef3c7;
+      --danger: #e02424;
+      --danger-light: #fde8e8;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-500: #6b7280;
+      --gray-700: #374151;
+      --gray-900: #111827;
+      --border-radius: 10px;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+      --shadow-lg: 0 4px 20px rgba(0,0,0,0.12);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', '맑은 고딕', sans-serif;
+      background: #f0f4f8;
+      color: var(--gray-900);
+      line-height: 1.7;
+    }
+
+    /* ─── Header ─── */
+    header {
+      background: linear-gradient(135deg, #1a56db 0%, #0d3a8c 100%);
+      color: #fff;
+      padding: 48px 40px 40px;
+      text-align: center;
+    }
+    header .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      letter-spacing: 0.5px;
+    }
+    header h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 10px; }
+    header p { font-size: 1.05rem; opacity: 0.88; max-width: 600px; margin: 0 auto; }
+
+    /* ─── TOC ─── */
+    .toc {
+      background: #fff;
+      border-radius: var(--border-radius);
+      box-shadow: var(--shadow);
+      padding: 28px 32px;
+      margin: 32px auto;
+      max-width: 900px;
+    }
+    .toc h2 { font-size: 1rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+    .toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+    .toc a {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .toc a:hover { background: var(--primary-light); border-color: var(--primary); }
+    .toc a .num { background: var(--primary); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+
+    /* ─── Sections ─── */
+    .section {
+      background: #fff;
+      border-radius: var(--border-radius);
+      box-shadow: var(--shadow);
+      padding: 36px 40px;
+      margin: 0 auto 28px;
+      max-width: 900px;
+    }
+    .section-header {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid var(--gray-100);
+    }
+    .section-icon {
+      width: 44px; height: 44px;
+      background: var(--primary-light);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .section h2 { font-size: 1.4rem; font-weight: 700; color: var(--gray-900); }
+    .section h3 { font-size: 1.05rem; font-weight: 600; color: var(--gray-700); margin: 24px 0 12px; }
+    .section p { color: var(--gray-700); margin-bottom: 14px; }
+    .section p:last-child { margin-bottom: 0; }
+
+    /* ─── Architecture Diagram ─── */
+    .arch {
+      display: grid;
+      grid-template-columns: 1fr 48px 1fr 48px 1fr;
+      align-items: center;
+      gap: 0;
+      margin: 24px 0;
+      overflow-x: auto;
+    }
+    .arch-box {
+      border-radius: 10px;
+      padding: 18px 16px;
+      text-align: center;
+    }
+    .arch-box .icon { font-size: 28px; margin-bottom: 8px; }
+    .arch-box .title { font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; }
+    .arch-box .sub { font-size: 0.76rem; color: var(--gray-500); line-height: 1.4; }
+    .arch-arrow { text-align: center; font-size: 22px; color: var(--gray-300); }
+
+    .box-blue { background: var(--primary-light); border: 2px solid var(--primary); }
+    .box-blue .title { color: var(--primary); }
+    .box-green { background: var(--secondary-light); border: 2px solid var(--secondary); }
+    .box-green .title { color: var(--secondary); }
+    .box-yellow { background: var(--warning-light); border: 2px solid var(--warning); }
+    .box-yellow .title { color: #92400e; }
+    .box-gray { background: var(--gray-100); border: 2px solid var(--gray-300); }
+    .box-gray .title { color: var(--gray-700); }
+
+    /* ─── Flow Steps ─── */
+    .flow {
+      counter-reset: flow;
+      margin: 20px 0;
+    }
+    .flow-item {
+      display: flex; gap: 16px;
+      padding: 16px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+      margin-bottom: 10px;
+      background: var(--gray-50);
+      position: relative;
+    }
+    .flow-item::before {
+      counter-increment: flow;
+      content: counter(flow);
+      background: var(--primary);
+      color: #fff;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .flow-item .flow-content strong { display: block; font-size: 0.95rem; margin-bottom: 2px; }
+    .flow-item .flow-content span { font-size: 0.87rem; color: var(--gray-500); }
+
+    /* ─── File Tree ─── */
+    .file-tree {
+      background: var(--gray-900);
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 22px 24px;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      font-size: 0.85rem;
+      line-height: 1.9;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+    .file-tree .dir { color: #93c5fd; font-weight: 600; }
+    .file-tree .file-js { color: #fde68a; }
+    .file-tree .file-html { color: #a7f3d0; }
+    .file-tree .file-json { color: #fca5a5; }
+    .file-tree .file-css { color: #c4b5fd; }
+    .file-tree .file-other { color: #d1d5db; }
+    .file-tree .comment { color: #6b7280; }
+
+    /* ─── Code Block ─── */
+    .code {
+      background: var(--gray-900);
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 18px 20px;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      font-size: 0.84rem;
+      line-height: 1.8;
+      overflow-x: auto;
+      margin: 12px 0;
+      position: relative;
+    }
+    .code .prompt { color: #4ade80; }
+    .code .comment { color: #6b7280; }
+    .code .string { color: #a3e635; }
+    .code .keyword { color: #93c5fd; }
+    .code .lang-label {
+      position: absolute; top: 10px; right: 14px;
+      font-size: 0.72rem; color: #6b7280;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* ─── Info Boxes ─── */
+    .info-box {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      display: flex; gap: 12px;
+      align-items: flex-start;
+    }
+    .info-box .ib-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .info-box .ib-content { font-size: 0.9rem; line-height: 1.6; }
+    .info-box .ib-content strong { display: block; margin-bottom: 3px; }
+    .info-tip { background: var(--primary-light); border-left: 4px solid var(--primary); }
+    .info-warn { background: var(--warning-light); border-left: 4px solid var(--warning); }
+    .info-ok { background: var(--secondary-light); border-left: 4px solid var(--secondary); }
+    .info-danger { background: var(--danger-light); border-left: 4px solid var(--danger); }
+
+    /* ─── Grid Cards ─── */
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin: 18px 0; }
+    .card {
+      border-radius: 10px;
+      padding: 18px;
+      border: 1.5px solid var(--gray-200);
+      background: var(--gray-50);
+    }
+    .card .card-icon { font-size: 26px; margin-bottom: 10px; }
+    .card .card-title { font-size: 0.9rem; font-weight: 700; margin-bottom: 6px; color: var(--gray-900); }
+    .card .card-desc { font-size: 0.82rem; color: var(--gray-500); line-height: 1.5; }
+
+    /* ─── Table ─── */
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+    th { background: var(--gray-100); padding: 10px 14px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--gray-200); }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--gray-50); }
+    .td-mono { font-family: monospace; font-size: 0.83rem; color: var(--primary); }
+
+    /* ─── Tag ─── */
+    .tag {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin: 1px;
+    }
+    .tag-blue { background: var(--primary-light); color: var(--primary); }
+    .tag-green { background: var(--secondary-light); color: #0c6e51; }
+    .tag-yellow { background: var(--warning-light); color: #7c5e00; }
+    .tag-gray { background: var(--gray-100); color: var(--gray-700); }
+
+    /* ─── Sheets Schema ─── */
+    .sheets-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.85rem; }
+    .sheets-table th { background: #34a853; color: #fff; padding: 9px 12px; text-align: center; }
+    .sheets-table td { border: 1px solid var(--gray-200); padding: 8px 12px; text-align: center; }
+    .sheets-table .row-header { background: #e8f5e9; font-weight: 700; color: #1b5e20; }
+    .sheets-table .col-key { background: #e3f2fd; font-weight: 600; color: #0d47a1; }
+
+    /* ─── Step List ─── */
+    .step-list { list-style: none; margin: 14px 0; }
+    .step-list li {
+      padding: 12px 16px 12px 44px;
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+      margin-bottom: 8px;
+      background: var(--gray-50);
+      position: relative;
+      font-size: 0.92rem;
+      line-height: 1.6;
+    }
+    .step-list li::before {
+      content: attr(data-num);
+      position: absolute; left: 12px; top: 12px;
+      background: var(--primary);
+      color: #fff;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .step-list li.warning::before { background: var(--warning); }
+    .step-list li code {
+      background: var(--gray-200);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 0.88em;
+      color: var(--gray-900);
+    }
+
+    /* ─── Learning Diagram ─── */
+    .learning-flow {
+      display: flex; flex-direction: column; gap: 4px;
+      margin: 20px 0;
+    }
+    .lf-row {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .lf-box {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      flex: 1;
+      text-align: center;
+    }
+    .lf-arrow { color: var(--gray-300); font-size: 18px; flex-shrink: 0; }
+    .lf-label { font-size: 0.8rem; color: var(--gray-500); padding: 0 8px; }
+    .lf-blue { background: var(--primary-light); color: var(--primary); border: 1.5px solid var(--primary); }
+    .lf-green { background: var(--secondary-light); color: #0c6e51; border: 1.5px solid var(--secondary); }
+    .lf-yellow { background: var(--warning-light); color: #92400e; border: 1.5px solid var(--warning); }
+
+    /* ─── Git Section ─── */
+    .git-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .git-card {
+      border-radius: 10px;
+      border: 1.5px solid var(--gray-200);
+      overflow: hidden;
+    }
+    .git-card-header {
+      background: var(--gray-100);
+      padding: 12px 16px;
+      font-weight: 700;
+      font-size: 0.9rem;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .git-card-body {
+      padding: 14px 16px;
+      font-size: 0.88rem;
+      line-height: 1.7;
+    }
+
+    /* ─── Footer ─── */
+    footer {
+      text-align: center;
+      padding: 32px 20px 40px;
+      color: var(--gray-500);
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+
+    hr.divider { border: none; border-top: 1px solid var(--gray-200); margin: 24px 0; }
+
+    @media (max-width: 640px) {
+      header { padding: 32px 20px; }
+      header h1 { font-size: 1.6rem; }
+      .section { padding: 24px 20px; }
+      .arch { grid-template-columns: 1fr; }
+      .arch-arrow { transform: rotate(90deg); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════ HEADER ═══════════════════════════════════ -->
+<header>
+  <div class="badge">Chrome Extension · Manifest V3</div>
+  <h1>Resume Analyzer 사용 가이드</h1>
+  <p>AI 기반 이력서 분석 크롬 확장프로그램의 동작 방식, 설정 방법, 저장소 관리 방법을 안내합니다.</p>
+</header>
+
+<!-- ═══════════════════════════════════ TOC ═══════════════════════════════════ -->
+<div class="toc">
+  <h2>목차</h2>
+  <div class="toc-grid">
+    <a href="#overview"><span class="num">1</span> 서비스 개요</a>
+    <a href="#structure"><span class="num">2</span> 파일 구조</a>
+    <a href="#flow"><span class="num">3</span> 전체 동작 흐름</a>
+    <a href="#input"><span class="num">4</span> 이력서 입력 방법</a>
+    <a href="#ai"><span class="num">5</span> AI 분석 엔진</a>
+    <a href="#sheets"><span class="num">6</span> Google Sheets 연동</a>
+    <a href="#auth"><span class="num">7</span> 인증 구조</a>
+    <a href="#learning"><span class="num">8</span> 학습 피드백 루프</a>
+    <a href="#install"><span class="num">9</span> 확장프로그램 설치</a>
+    <a href="#git-clone"><span class="num">10</span> 저장소 로컬 다운로드</a>
+    <a href="#git-update"><span class="num">11</span> 코드 업데이트</a>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ 1. OVERVIEW ═══════════════════════════════════ -->
+<div class="section" id="overview">
+  <div class="section-header">
+    <div class="section-icon">🔍</div>
+    <h2>1. 서비스 개요</h2>
+  </div>
+
+  <p><strong>Resume Analyzer</strong>는 채용 담당자가 채용 사이트에서 이력서를 볼 때 실시간으로 AI가 분석해주는 크롬 확장프로그램입니다. 분석 결과는 Google Sheets에 자동으로 저장되며, 합/불합격 피드백이 쌓일수록 AI의 예측 정확도가 향상됩니다.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">🤖</div>
+      <div class="card-title">AI 분석</div>
+      <div class="card-desc">Google Gemini API가 포지션 JD와 이력서를 비교해 적합도를 0~100%로 산출</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Sheets 자동 저장</div>
+      <div class="card-desc">분석 결과·강약점·검토 의견이 Google Sheets에 자동 기록</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🧠</div>
+      <div class="card-title">학습 개선</div>
+      <div class="card-desc">합/불합격 피드백이 쌓이면 유사 포지션 예측 정확도가 높아짐</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🖥️</div>
+      <div class="card-title">사이드 패널 UI</div>
+      <div class="card-desc">브라우저 오른쪽에 400px 패널이 열려 페이지를 이동하지 않고 분석 가능</div>
+    </div>
+  </div>
+
+  <h3>기술 스택</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+    <span class="tag tag-blue">Chrome Extension MV3</span>
+    <span class="tag tag-blue">JavaScript (ES2020+)</span>
+    <span class="tag tag-yellow">Google Gemini 2.5 Flash/Pro</span>
+    <span class="tag tag-green">Google Sheets API v4</span>
+    <span class="tag tag-green">Google OAuth2</span>
+    <span class="tag tag-gray">HTML5 / CSS3</span>
+  </div>
+
+  <div class="info-box info-ok" style="margin-top:20px;">
+    <span class="ib-icon">✅</span>
+    <div class="ib-content">
+      <strong>별도 서버 불필요</strong>
+      모든 데이터는 사용자의 Google Sheets에 저장됩니다. 외부 백엔드 서버가 없으므로 유지비용이 없습니다.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ 2. STRUCTURE ═══════════════════════════════════ -->
+<div class="section" id="structure">
+  <div class="section-header">
+    <div class="section-icon">📁</div>
+    <h2>2. 파일 구조</h2>
+  </div>
+
+  <p>프로젝트는 <code style="background:var(--gray-100);padding:2px 6px;border-radius:4px;">resume-analyzer-extension/</code> 폴더 아래 다음과 같이 구성되어 있습니다.</p>
+
+  <div class="file-tree">
+<span class="dir">resume-analyzer-extension/</span>
+│
+├── <span class="file-json">manifest.json</span>          <span class="comment">← 확장프로그램 설정 (권한, OAuth2, 버전)</span>
+├── <span class="file-js">generate-icons.js</span>      <span class="comment">← 아이콘 생성 스크립트 (개발용)</span>
+├── <span class="file-other">PLAN.md</span>               <span class="comment">← 기능 기획서 (Korean)</span>
+│
+├── <span class="dir">background/</span>
+│   └── <span class="file-js">service-worker.js</span>  <span class="comment">← 백그라운드: 탭 캡처·사이드패널 제어</span>
+│
+├── <span class="dir">popup/</span>                       <span class="comment">← 사이드 패널 UI</span>
+│   ├── <span class="file-html">popup.html</span>         <span class="comment">← 메인 화면 HTML (포지션 선택, 입력, 결과)</span>
+│   ├── <span class="file-css">popup.css</span>          <span class="comment">← 스타일시트 (400px 사이드패널 기준)</span>
+│   └── <span class="file-js">popup.js</span>            <span class="comment">← 핵심 컨트롤러 (618줄, 모든 로직 총괄)</span>
+│
+├── <span class="dir">content/</span>                     <span class="comment">← 웹페이지에 주입되는 스크립트</span>
+│   ├── <span class="file-js">content.js</span>          <span class="comment">← 텍스트 선택 툴바 주입</span>
+│   └── <span class="file-css">content.css</span>        <span class="comment">← 툴바 최소 스타일</span>
+│
+├── <span class="dir">utils/</span>                       <span class="comment">← 공통 유틸리티</span>
+│   ├── <span class="file-js">storage.js</span>          <span class="comment">← chrome.storage.local 래퍼</span>
+│   ├── <span class="file-js">auth.js</span>             <span class="comment">← Google OAuth2 토큰 관리</span>
+│   ├── <span class="file-js">sheets.js</span>           <span class="comment">← Google Sheets API v4 연동</span>
+│   └── <span class="file-js">api.js</span>             <span class="comment">← Gemini API 호출 및 응답 파싱</span>
+│
+├── <span class="dir">apps-script/</span>
+│   └── <span class="file-js">Code.gs</span>            <span class="comment">← Google Apps Script 대체 백엔드 (선택적)</span>
+│
+├── <span class="dir">icons/</span>
+│   ├── icon16.png · icon48.png · icon128.png
+│
+└── <span class="dir">backup/launchWebAuthFlow/</span>   <span class="comment">← OAuth 대체 방식 백업본</span>
+  </div>
+
+  <h3>핵심 파일별 역할 요약</h3>
+  <table>
+    <tr>
+      <th>파일</th>
+      <th>역할</th>
+      <th>주요 기능</th>
+    </tr>
+    <tr>
+      <td class="td-mono">manifest.json</td>
+      <td>확장프로그램 선언</td>
+      <td>권한 목록, OAuth2 Client ID, 사이드패널 경로 지정</td>
+    </tr>
+    <tr>
+      <td class="td-mono">popup/popup.js</td>
+      <td>메인 컨트롤러</td>
+      <td>포지션 선택, 캡처, 분석 호출, 피드백 저장 전체 흐름</td>
+    </tr>
+    <tr>
+      <td class="td-mono">utils/api.js</td>
+      <td>Gemini AI 연동</td>
+      <td>프롬프트 생성, API 호출, JSON 파싱 (3단계 폴백)</td>
+    </tr>
+    <tr>
+      <td class="td-mono">utils/sheets.js</td>
+      <td>Sheets 연동</td>
+      <td>포지션 조회, 후보자 추가/수정, 검토결과 업데이트</td>
+    </tr>
+    <tr>
+      <td class="td-mono">utils/auth.js</td>
+      <td>OAuth2 인증</td>
+      <td>토큰 발급·갱신·폐기 (chrome.identity 사용)</td>
+    </tr>
+    <tr>
+      <td class="td-mono">content/content.js</td>
+      <td>텍스트 선택</td>
+      <td>웹페이지 상단에 선택 툴바 주입, 선택된 텍스트 전달</td>
+    </tr>
+    <tr>
+      <td class="td-mono">background/service-worker.js</td>
+      <td>탭 캡처</td>
+      <td>스크린샷 촬영, 사이드패널 개폐 이벤트 처리</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════ 3. FLOW ═══════════════════════════════════ -->
+<div class="section" id="flow">
+  <div class="section-header">
+    <div class="section-icon">🔄</div>
+    <h2>3. 전체 동작 흐름</h2>
+  </div>
+
+  <h3>시스템 아키텍처</h3>
+  <div class="arch">
+    <div class="arch-box box-blue">
+      <div class="icon">🖥️</div>
+      <div class="title">사이드 패널</div>
+      <div class="sub">popup.html/js<br>사용자 인터페이스</div>
+    </div>
+    <div class="arch-arrow">⟷</div>
+    <div class="arch-box box-yellow">
+      <div class="icon">🤖</div>
+      <div class="title">Gemini API</div>
+      <div class="sub">gemini-2.5-flash<br>이력서 AI 분석</div>
+    </div>
+    <div class="arch-arrow">⟷</div>
+    <div class="arch-box box-green">
+      <div class="icon">📊</div>
+      <div class="title">Google Sheets</div>
+      <div class="sub">포지션 · 후보자<br>분석결과 저장</div>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:-8px;margin-bottom:16px;font-size:0.82rem;color:var(--gray-500);">
+    ↑ 이 3개 컴포넌트가 확장프로그램의 핵심 축입니다
+  </div>
+
+  <div style="background:var(--gray-50);border-radius:8px;padding:6px;margin-bottom:4px;text-align:center;font-size:0.8rem;font-weight:600;color:var(--gray-500);">+ 크롬 확장프로그램 내부 구성요소</div>
+  <div class="arch" style="grid-template-columns:1fr 32px 1fr 32px 1fr 32px 1fr;">
+    <div class="arch-box box-gray" style="padding:12px 8px;">
+      <div class="icon" style="font-size:20px;">⚙️</div>
+      <div class="title" style="font-size:0.78rem;">Service Worker</div>
+      <div class="sub" style="font-size:0.72rem;">탭 캡처<br>패널 제어</div>
+    </div>
+    <div class="arch-arrow" style="font-size:14px;">↔</div>
+    <div class="arch-box box-gray" style="padding:12px 8px;">
+      <div class="icon" style="font-size:20px;">📝</div>
+      <div class="title" style="font-size:0.78rem;">Content Script</div>
+      <div class="sub" style="font-size:0.72rem;">텍스트 선택<br>툴바 주입</div>
+    </div>
+    <div class="arch-arrow" style="font-size:14px;">↔</div>
+    <div class="arch-box box-gray" style="padding:12px 8px;">
+      <div class="icon" style="font-size:20px;">🔑</div>
+      <div class="title" style="font-size:0.78rem;">Auth (OAuth2)</div>
+      <div class="sub" style="font-size:0.72rem;">Google 계정<br>토큰 관리</div>
+    </div>
+    <div class="arch-arrow" style="font-size:14px;">↔</div>
+    <div class="arch-box box-gray" style="padding:12px 8px;">
+      <div class="icon" style="font-size:20px;">💾</div>
+      <div class="title" style="font-size:0.78rem;">Local Storage</div>
+      <div class="sub" style="font-size:0.72rem;">API키, 설정<br>로컬 저장</div>
+    </div>
+  </div>
+
+  <h3>사용자 워크플로우 (단계별)</h3>
+  <div class="flow">
+    <div class="flow-item">
+      <div class="flow-content">
+        <strong>확장프로그램 아이콘 클릭</strong>
+        <span>크롬 우측에 400px 사이드 패널이 열림. Service Worker가 <code>openPanelOnActionClick</code> 이벤트로 패널을 활성화.</span>
+      </div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-content">
+        <strong>포지션 선택</strong>
+        <span>Sheets "소싱포지션" 탭에서 포지션 목록을 불러옴. 드롭다운에서 선택하면 JD 미리보기가 표시됨. "진행 중" 필터 토글 가능.</span>
+      </div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-content">
+        <strong>후보자 선택 또는 신규 입력</strong>
+        <span>동일 포지션의 기존 후보자 목록이 표시됨. 신규 후보자면 이름을 입력하고 이력서 입력 단계로 진행.</span>
+      </div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-content">
+        <strong>이력서 입력 (3가지 방법 중 선택)</strong>
+        <span>① 화면 캡처 · ② 텍스트 드래그 선택 · ③ 직접 붙여넣기. 스크롤 전체 캡처로 여러 페이지 한 번에 처리 가능.</span>
+      </div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-content">
+        <strong>AI 분석 실행</strong>
+        <span>Gemini API에 JD + 이력서 + 과거 합/불합격 사례(few-shot)를 전송. JSON 형식으로 결과 수신 후 Sheets에 자동 저장.</span>
+      </div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-content">
+        <strong>결과 확인</strong>
+        <span>적합도 게이지(0~100%), 지원 권고/보류/비권고 배지, 주요경력, 강점·약점 리스트, JD 항목별 충족 여부 표시.</span>
+      </div>
+    </div>
+    <div class="flow-item">
+      <div class="flow-content">
+        <strong>피드백 입력 (합격/불합격)</strong>
+        <span>검토 사유를 입력하고 합격 또는 불합격 버튼 클릭. Sheets "분석현황" 탭의 "검토결과" 열(H열)이 업데이트됨.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ 4. INPUT METHODS ═══════════════════════════════════ -->
+<div class="section" id="input">
+  <div class="section-header">
+    <div class="section-icon">📥</div>
+    <h2>4. 이력서 입력 방법</h2>
+  </div>
+
+  <p>이력서 내용을 AI에게 전달하는 방법은 3가지가 있으며, 상황에 맞게 선택합니다.</p>
+
+  <h3>방법 1 — 화면 캡처 (스크린샷)</h3>
+  <div class="info-box info-tip">
+    <span class="ib-icon">📷</span>
+    <div class="ib-content">
+      채용 사이트에서 이력서 페이지를 열어 놓은 상태에서 사용. 이미지를 Gemini가 직접 읽어 텍스트를 추출합니다.
+    </div>
+  </div>
+  <table>
+    <tr><th>종류</th><th>동작</th><th>적합한 경우</th></tr>
+    <tr>
+      <td><strong>단일 캡처</strong></td>
+      <td><code>chrome.tabs.captureVisibleTab()</code>으로 현재 화면 1장 촬영</td>
+      <td>이력서가 한 화면에 다 보일 때</td>
+    </tr>
+    <tr>
+      <td><strong>스크롤 전체 캡처</strong></td>
+      <td>85% 뷰포트 단위로 스크롤하며 여러 장 촬영 후 배열로 전송</td>
+      <td>이력서가 길어 여러 화면에 걸쳐 있을 때</td>
+    </tr>
+  </table>
+
+  <h3>방법 2 — 텍스트 선택 모드</h3>
+  <ol class="step-list">
+    <li data-num="1">사이드패널에서 <strong>"🖱️ 선택 모드 시작"</strong> 버튼 클릭</li>
+    <li data-num="2">Content Script가 웹페이지 상단에 파란색 툴바를 주입
+      <div class="code" style="margin-top:8px;font-size:0.8rem;">
+        <span class="comment">// 툴바 UI (웹페이지 최상단에 표시)</span><br>
+        [ 📋 분석할 이력서 텍스트를 드래그하여 선택하세요 ]  [ 선택 완료 ]  [ 취소 ]
+      </div>
+    </li>
+    <li data-num="3">이력서 텍스트를 마우스로 드래그하여 선택</li>
+    <li data-num="4"><strong>"선택 완료"</strong> 클릭 → <code>chrome.runtime.sendMessage(TEXT_SELECTED)</code>로 사이드패널에 전달</li>
+    <li data-num="5">사이드패널에 선택된 텍스트 미리보기 표시</li>
+  </ol>
+
+  <h3>방법 3 — 직접 붙여넣기</h3>
+  <p>"직접 입력" 탭에서 이력서 전문을 복사-붙여넣기합니다. 글자 수가 실시간으로 표시됩니다. PDF나 Word 파일의 내용을 텍스트로 복사할 때 유용합니다.</p>
+</div>
+
+<!-- ═══════════════════════════════════ 5. AI ENGINE ═══════════════════════════════════ -->
+<div class="section" id="ai">
+  <div class="section-header">
+    <div class="section-icon">🤖</div>
+    <h2>5. AI 분석 엔진 (Gemini API)</h2>
+  </div>
+
+  <h3>사용 모델</h3>
+  <table>
+    <tr><th>모델</th><th>특징</th><th>권장 사용</th></tr>
+    <tr>
+      <td class="td-mono">gemini-2.5-flash</td>
+      <td>빠른 응답, 낮은 비용 <span class="tag tag-green">기본값</span></td>
+      <td>일반적인 이력서 분석</td>
+    </tr>
+    <tr>
+      <td class="td-mono">gemini-2.5-pro</td>
+      <td>더 높은 정확도, 복잡한 JD 처리</td>
+      <td>상세한 분석이 필요할 때</td>
+    </tr>
+  </table>
+
+  <h3>API 요청 구조</h3>
+  <div class="code">
+    <span class="lang-label">JavaScript</span>
+    <span class="comment">// API 엔드포인트</span><br>
+    POST https://generativelanguage.googleapis.com/v1beta/models/<span class="string">{model}</span>:generateContent?key=<span class="string">{apiKey}</span><br><br>
+    <span class="comment">// 파라미터</span><br>
+    temperature: <span class="keyword">0.2</span>        <span class="comment">← 낮은 값 = 일관된 결과 (창의성 최소화)</span><br>
+    maxOutputTokens: <span class="keyword">65536</span>  <span class="comment">← 긴 이력서도 처리 가능한 최대값</span>
+  </div>
+
+  <h3>AI 응답 형식 (JSON)</h3>
+  <p>Gemini는 항상 아래 JSON 형식으로만 응답하도록 프롬프트에 강제되어 있습니다.</p>
+  <div class="code">
+    <span class="lang-label">JSON 출력 예시</span>
+    {<br>
+    &nbsp;&nbsp;<span class="string">"careerSummary"</span>: <span class="string">"A사 5년/백엔드, B사 3년/풀스택"</span>,<br>
+    &nbsp;&nbsp;<span class="string">"probability"</span>: <span class="keyword">78</span>,  <span class="comment">← 포지션 적합도 (0~100)</span><br>
+    &nbsp;&nbsp;<span class="string">"summary"</span>: <span class="string">"경력이 풍부하고 기술 스택이 매칭됩니다."</span>,<br>
+    &nbsp;&nbsp;<span class="string">"strengths"</span>: [<span class="string">"경력 풍부"</span>, <span class="string">"기술 스택 매칭"</span>],<br>
+    &nbsp;&nbsp;<span class="string">"weaknesses"</span>: [<span class="string">"프로젝트 리딩 경험 부족"</span>],<br>
+    &nbsp;&nbsp;<span class="string">"keyMatches"</span>: [<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;{ <span class="string">"requirement"</span>: <span class="string">"3년 이상 경력"</span>, <span class="string">"matched"</span>: <span class="keyword">true</span>, <span class="string">"detail"</span>: <span class="string">"5년 경험"</span> }<br>
+    &nbsp;&nbsp;],<br>
+    &nbsp;&nbsp;<span class="string">"recommendation"</span>: <span class="string">"지원 권고"</span>  <span class="comment">← 지원 권고 | 지원 보류 | 지원 비권고</span><br>
+    }
+  </div>
+
+  <h3>응답 파싱 (3단계 폴백)</h3>
+  <p>모델이 JSON 형식을 벗어난 응답을 줄 경우를 대비해 3단계로 파싱을 시도합니다.</p>
+  <table>
+    <tr><th>단계</th><th>방법</th><th>처리 대상</th></tr>
+    <tr><td>1단계</td><td>직접 <code>JSON.parse()</code></td><td>완벽한 JSON 응답</td></tr>
+    <tr><td>2단계</td><td>마크다운 백틱(```json) 제거 후 파싱</td><td>코드블록으로 감싼 경우</td></tr>
+    <tr><td>3단계</td><td>정규식으로 <code>{...}</code> 추출 후 파싱</td><td>앞뒤에 설명 텍스트가 붙은 경우</td></tr>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════ 6. SHEETS ═══════════════════════════════════ -->
+<div class="section" id="sheets">
+  <div class="section-header">
+    <div class="section-icon">📊</div>
+    <h2>6. Google Sheets 데이터 구조</h2>
+  </div>
+
+  <p>스프레드시트에는 두 개의 탭이 필요합니다. 정확한 이름과 구조를 지켜야 합니다.</p>
+
+  <h3>탭 1 — "소싱포지션" (포지션 정보)</h3>
+  <div class="info-box info-warn">
+    <span class="ib-icon">⚠️</span>
+    <div class="ib-content">헤더는 <strong>5행</strong>에 있어야 합니다. 1~4행은 타이틀·설명 등 자유롭게 사용 가능.</div>
+  </div>
+  <table class="sheets-table">
+    <tr>
+      <th>A열</th><th>B열</th><th>C열</th><th>D열</th><th>E열</th>
+    </tr>
+    <tr>
+      <td class="row-header">서칭코드</td>
+      <td class="row-header">포지션명</td>
+      <td class="row-header">JD</td>
+      <td class="row-header">선호 조건</td>
+      <td class="row-header">진행여부</td>
+    </tr>
+    <tr>
+      <td>K001-BE-001</td>
+      <td>카카오 백엔드</td>
+      <td>3년 이상 경력, Java/Spring...</td>
+      <td>AWS 경험자 우대</td>
+      <td>진행 중</td>
+    </tr>
+    <tr>
+      <td>N002-FE-003</td>
+      <td>네이버 프론트엔드</td>
+      <td>React 2년 이상...</td>
+      <td>TypeScript 필수</td>
+      <td>마감</td>
+    </tr>
+  </table>
+
+  <h3>탭 2 — "분석현황" (후보자 분석 결과)</h3>
+  <div class="info-box info-tip">
+    <span class="ib-icon">ℹ️</span>
+    <div class="ib-content">헤더는 <strong>1행</strong>에 있어야 합니다. 분석 결과는 아래로 계속 추가됩니다.</div>
+  </div>
+  <table class="sheets-table">
+    <tr>
+      <th>A열</th><th>B열</th><th>C열</th><th>D열</th><th>E열</th><th>F열</th><th>G열</th><th>H열</th><th>I열</th>
+    </tr>
+    <tr>
+      <td class="row-header">서칭코드</td>
+      <td class="row-header">이름</td>
+      <td class="row-header">서칭일</td>
+      <td class="row-header">주요경력</td>
+      <td class="row-header">종합평가</td>
+      <td class="row-header">강점</td>
+      <td class="row-header">약점</td>
+      <td class="col-key">검토결과</td>
+      <td class="row-header">분석내용</td>
+    </tr>
+    <tr>
+      <td>K001-BE-001</td>
+      <td>홍길동</td>
+      <td>2025-05-27</td>
+      <td>A사 5년/백엔드</td>
+      <td>경력 풍부, 스택 매칭</td>
+      <td>경력 풍부</td>
+      <td>리딩 경험 부족</td>
+      <td style="background:#e8f5e9;color:#1b5e20;font-weight:600;">합격 - 사유: 경력</td>
+      <td>{JSON...}</td>
+    </tr>
+  </table>
+  <p style="font-size:0.85rem;color:var(--gray-500);margin-top:8px;">H열(검토결과)은 피드백을 입력하면 자동 업데이트됩니다. I열(분석내용)에는 AI가 반환한 전체 JSON이 저장됩니다.</p>
+
+  <h3>Sheets API 호출 방식</h3>
+  <div class="code">
+    <span class="lang-label">sheets.js</span>
+    <span class="comment">// 포지션 목록 조회</span><br>
+    GET /spreadsheets/<span class="string">{id}</span>/values/소싱포지션!A5:E<br><br>
+    <span class="comment">// 후보자 기록 추가</span><br>
+    POST /spreadsheets/<span class="string">{id}</span>/values/분석현황!A:I:append<br><br>
+    <span class="comment">// 검토결과 업데이트</span><br>
+    PUT /spreadsheets/<span class="string">{id}</span>/values/분석현황!H<span class="string">{rowIndex}</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ 7. AUTH ═══════════════════════════════════ -->
+<div class="section" id="auth">
+  <div class="section-header">
+    <div class="section-icon">🔑</div>
+    <h2>7. Google 인증 구조</h2>
+  </div>
+
+  <p>Sheets API에 접근하려면 Google 계정 인증이 필요합니다. 확장프로그램은 크롬 내장 OAuth2 메커니즘을 사용합니다.</p>
+
+  <h3>인증 방식: chrome.identity.getAuthToken()</h3>
+  <div class="info-box info-ok">
+    <span class="ib-icon">✅</span>
+    <div class="ib-content">
+      <strong>장점</strong>
+      크롬이 토큰을 자동으로 캐시하고 갱신합니다. 별도 Client Secret이 불필요하며, 한 번 로그인하면 이후 자동으로 인증됩니다.
+    </div>
+  </div>
+
+  <h3>최초 연결 과정</h3>
+  <ol class="step-list">
+    <li data-num="1">사이드패널 설정 탭에서 <strong>"🔗 Google 계정 연결"</strong> 버튼 클릭</li>
+    <li data-num="2">크롬이 Google OAuth 동의 화면 표시 (Sheets 읽기/쓰기 권한 요청)</li>
+    <li data-num="3">사용자가 권한 승인 → 크롬 내부에 토큰 캐시</li>
+    <li data-num="4">UI에 <strong>"✅ Google 계정 연결됨"</strong> 표시</li>
+    <li data-num="5">이후 Sheets API 호출 시 자동으로 Bearer 토큰 사용 (사용자 개입 없음)</li>
+  </ol>
+
+  <h3>Google Cloud 사전 설정 (이미 완료됨)</h3>
+  <table>
+    <tr><th>항목</th><th>값</th></tr>
+    <tr>
+      <td>OAuth2 Client ID</td>
+      <td class="td-mono" style="font-size:0.78rem;">726524967668-19pkd9oir0cp3p3p750pnnisf01nargp.apps.googleusercontent.com</td>
+    </tr>
+    <tr>
+      <td>요청 권한(Scope)</td>
+      <td class="td-mono">https://www.googleapis.com/auth/spreadsheets</td>
+    </tr>
+    <tr>
+      <td>Client 타입</td>
+      <td>Chrome App (확장프로그램 ID 바인딩)</td>
+    </tr>
+  </table>
+
+  <div class="info-box info-warn">
+    <span class="ib-icon">⚠️</span>
+    <div class="ib-content">
+      <strong>새 기기에 설치 시 주의</strong>
+      확장프로그램을 "압축 해제된 확장프로그램"으로 로드하면 기기마다 Extension ID가 달라질 수 있습니다. <code>manifest.json</code>의 <code>"key"</code> 필드가 ID를 고정시켜 줍니다 — 이 값은 삭제하지 마세요.
+    </div>
+  </div>
+
+  <h3>백업 인증 방식 (/backup 폴더)</h3>
+  <p>메인 인증 방식이 동작하지 않을 경우를 대비한 <code>launchWebAuthFlow</code> 기반 백업 코드가 <code>backup/launchWebAuthFlow/</code>에 있습니다. Client Secret이 필요한 방식이므로 평상시에는 사용하지 않습니다.</p>
+</div>
+
+<!-- ═══════════════════════════════════ 8. LEARNING ═══════════════════════════════════ -->
+<div class="section" id="learning">
+  <div class="section-header">
+    <div class="section-icon">🧠</div>
+    <h2>8. 학습 피드백 루프 (Few-Shot Learning)</h2>
+  </div>
+
+  <p>피드백이 쌓일수록 AI의 예측 정확도가 높아지는 학습 구조입니다. 별도 모델 훈련 없이 프롬프트에 과거 사례를 포함시키는 "In-Context Learning" 방식입니다.</p>
+
+  <div class="learning-flow">
+    <div class="lf-row">
+      <div class="lf-box lf-blue">① 분석 실행<br><small>JD + 이력서 → Gemini</small></div>
+      <div class="lf-arrow">→</div>
+      <div class="lf-box lf-yellow">② AI 결과 수신<br><small>probability, 강점, 약점</small></div>
+      <div class="lf-arrow">→</div>
+      <div class="lf-box lf-green">③ Sheets 저장<br><small>분석현황 탭에 행 추가</small></div>
+    </div>
+    <div style="text-align:center;padding:6px 0;font-size:1.3rem;color:var(--gray-300);">↓</div>
+    <div class="lf-row">
+      <div class="lf-box lf-green">⑥ 다음 분석 시 자동 포함<br><small>프롬프트에 3개 사례 삽입</small></div>
+      <div class="lf-arrow">←</div>
+      <div class="lf-box lf-blue">⑤ Sheets H열 업데이트<br><small>"합격 - 사유: 경력 풍부"</small></div>
+      <div class="lf-arrow">←</div>
+      <div class="lf-box lf-yellow">④ 피드백 입력<br><small>합격/불합격 + 사유</small></div>
+    </div>
+  </div>
+
+  <h3>프롬프트에 포함되는 학습 데이터</h3>
+  <div class="code">
+    <span class="lang-label">Prompt (buildFewShotExamples)</span>
+    <span class="comment">## 동일 포지션 과거 사례 (학습용)</span><br><br>
+    [결과: <span class="keyword">합격</span> / 예측: 78%]<br>
+    주요경력: A사 5년/백엔드, B사 3년/풀스택<br>
+    ---<br>
+    [결과: <span class="keyword">불합격</span> / 예측: 35%]<br>
+    주요경력: C사 1년/프론트엔드<br>
+    ---
+  </div>
+
+  <div class="info-box info-tip">
+    <span class="ib-icon">💡</span>
+    <div class="ib-content">
+      <strong>효과</strong>
+      "이 포지션에서 합격한 사람은 경력 5년 이상이었다"는 패턴을 Gemini가 학습하여, 이후 유사 이력서에 더 높은 점수를 부여합니다. 피드백을 꾸준히 입력할수록 예측 정확도가 향상됩니다.
+    </div>
+  </div>
+
+  <p>학습에 사용되는 사례는 <strong>해당 포지션의 최근 3개</strong>로 제한됩니다 (프롬프트 길이 제어).</p>
+</div>
+
+<!-- ═══════════════════════════════════ 9. INSTALL ═══════════════════════════════════ -->
+<div class="section" id="install">
+  <div class="section-header">
+    <div class="section-icon">⚙️</div>
+    <h2>9. 확장프로그램 설치 방법</h2>
+  </div>
+
+  <div class="info-box info-warn">
+    <span class="ib-icon">⚠️</span>
+    <div class="ib-content">이 확장프로그램은 Chrome Web Store에 등록되지 않은 내부용 도구입니다. "개발자 모드"로 설치해야 합니다.</div>
+  </div>
+
+  <h3>1단계 — 확장프로그램 파일 준비</h3>
+  <p>저장소를 로컬에 받아(아래 10번 항목 참조) <code>resume-analyzer-extension</code> 폴더를 확인합니다.</p>
+
+  <h3>2단계 — 크롬에 설치</h3>
+  <ol class="step-list">
+    <li data-num="1">크롬 브라우저에서 주소창에 <code>chrome://extensions/</code> 입력 후 Enter</li>
+    <li data-num="2">우측 상단 <strong>"개발자 모드"</strong> 토글을 ON으로 켬</li>
+    <li data-num="3"><strong>"압축 해제된 확장프로그램을 로드합니다."</strong> 버튼 클릭</li>
+    <li data-num="4">로컬에 받은 <strong><code>resume-analyzer-extension</code> 폴더</strong>를 선택</li>
+    <li data-num="5">확장프로그램 목록에 "Resume Analyzer" 가 추가됨을 확인</li>
+    <li data-num="6">크롬 툴바에 확장프로그램 아이콘 핀 고정 (퍼즐 조각 아이콘 → 핀 클릭)</li>
+  </ol>
+
+  <h3>3단계 — 초기 설정</h3>
+  <ol class="step-list">
+    <li data-num="1">확장프로그램 아이콘 클릭 → 사이드패널 열림</li>
+    <li data-num="2">패널 우측 상단 <strong>"⚙️ 설정"</strong> 클릭</li>
+    <li data-num="3"><strong>Google AI API 키</strong> 입력 (발급: <code>aistudio.google.com/app/apikey</code>)</li>
+    <li data-num="4"><strong>Google 스프레드시트 ID</strong> 입력 (Sheets URL에서 <code>/d/</code> 뒤 ~ <code>/edit</code> 앞 문자열)</li>
+    <li data-num="5"><strong>"🔗 Google 계정 연결"</strong> 클릭 → OAuth 동의 화면에서 권한 승인</li>
+    <li data-num="6">설정 저장 후 포지션 목록이 로드되면 설치 완료</li>
+  </ol>
+
+  <h3>Google Sheets 사전 준비</h3>
+  <ol class="step-list">
+    <li data-num="1">새 Google Sheets 생성</li>
+    <li data-num="2">첫 번째 탭 이름을 정확히 <strong>"소싱포지션"</strong> 으로 변경</li>
+    <li data-num="3">두 번째 탭 이름을 정확히 <strong>"분석현황"</strong> 으로 변경</li>
+    <li data-num="4">"소싱포지션" 탭의 <strong>5행</strong>에 헤더 입력: <code>서칭코드 | 포지션명 | JD | 선호 조건 | 진행여부</code></li>
+    <li data-num="5">"분석현황" 탭의 <strong>1행</strong>에 헤더 입력: <code>서칭코드 | 이름 | 서칭일 | 주요경력 | 종합평가 | 강점 | 약점 | 검토결과 | 분석내용</code></li>
+    <li data-num="6">포지션 데이터를 소싱포지션 탭에 입력 후 스프레드시트 ID를 설정에 등록</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════ 10. GIT CLONE ═══════════════════════════════════ -->
+<div class="section" id="git-clone">
+  <div class="section-header">
+    <div class="section-icon">⬇️</div>
+    <h2>10. 저장소 로컬 다운로드 방법</h2>
+  </div>
+
+  <p>이 확장프로그램의 소스 코드는 GitHub 저장소(<strong>Com2uS-recruit/Claude_Study</strong>)에서 관리됩니다. 아래 방법으로 로컬 PC에 내려받을 수 있습니다.</p>
+
+  <h3>방법 A — Git으로 클론 (권장)</h3>
+  <div class="info-box info-tip">
+    <span class="ib-icon">💡</span>
+    <div class="ib-content">Git이 설치되어 있어야 합니다. 미설치 시 <code>git-scm.com</code>에서 다운로드하세요.</div>
+  </div>
+
+  <div class="git-steps">
+    <div class="git-card">
+      <div class="git-card-header">① 저장소 클론</div>
+      <div class="git-card-body">
+        <div class="code" style="margin:0;font-size:0.82rem;">
+          <span class="prompt">$</span> git clone https://github.com/Com2uS-recruit/Claude_Study.git
+        </div>
+        <p style="margin-top:10px;font-size:0.85rem;color:var(--gray-500);">현재 폴더에 <code>Claude_Study/</code> 폴더가 생성됩니다.</p>
+      </div>
+    </div>
+    <div class="git-card">
+      <div class="git-card-header">② 폴더 이동</div>
+      <div class="git-card-body">
+        <div class="code" style="margin:0;font-size:0.82rem;">
+          <span class="prompt">$</span> cd Claude_Study/resume-analyzer-extension
+        </div>
+        <p style="margin-top:10px;font-size:0.85rem;color:var(--gray-500);">이 폴더가 크롬에 로드할 실제 확장프로그램 폴더입니다.</p>
+      </div>
+    </div>
+    <div class="git-card">
+      <div class="git-card-header">③ 브랜치 확인</div>
+      <div class="git-card-body">
+        <div class="code" style="margin:0;font-size:0.82rem;">
+          <span class="prompt">$</span> git branch -a<br>
+          <span class="prompt">$</span> git log --oneline -5
+        </div>
+        <p style="margin-top:10px;font-size:0.85rem;color:var(--gray-500);">현재 브랜치와 최근 커밋 내역을 확인합니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>방법 B — ZIP 파일로 다운로드</h3>
+  <ol class="step-list">
+    <li data-num="1">GitHub 저장소 페이지 접속</li>
+    <li data-num="2">초록색 <strong>"Code"</strong> 버튼 클릭</li>
+    <li data-num="3"><strong>"Download ZIP"</strong> 클릭 → ZIP 파일 다운로드</li>
+    <li data-num="4">ZIP 압축 해제 → <code>Claude_Study-main/resume-analyzer-extension/</code> 폴더 확인</li>
+    <li data-num="5" class="warning">ZIP 방식은 이후 업데이트를 받을 수 없으므로 Git 클론 방식을 권장합니다.</li>
+  </ol>
+
+  <h3>특정 브랜치 클론 (개발 브랜치)</h3>
+  <div class="code">
+    <span class="lang-label">Bash</span>
+    <span class="comment"># 특정 브랜치로 클론</span><br>
+    <span class="prompt">$</span> git clone -b claude/kind-gates-8OAQw https://github.com/Com2uS-recruit/Claude_Study.git<br><br>
+    <span class="comment"># 이미 클론한 경우, 브랜치 전환</span><br>
+    <span class="prompt">$</span> git fetch origin<br>
+    <span class="prompt">$</span> git checkout claude/kind-gates-8OAQw
+  </div>
+
+  <div class="info-box info-tip">
+    <span class="ib-icon">ℹ️</span>
+    <div class="ib-content">
+      <strong>인증 오류 발생 시</strong>
+      저장소가 Private으로 설정되어 있다면 GitHub 계정 로그인이 필요합니다. Git Credential Manager가 자동으로 로그인 창을 띄워 줍니다.
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ 11. GIT UPDATE ═══════════════════════════════════ -->
+<div class="section" id="git-update">
+  <div class="section-header">
+    <div class="section-icon">🔄</div>
+    <h2>11. 코드 업데이트 방법</h2>
+  </div>
+
+  <p>코드가 수정되어 저장소에 반영된 경우, 아래 절차로 로컬 파일을 최신 상태로 갱신하고 크롬 확장프로그램에도 적용합니다.</p>
+
+  <h3>로컬 코드 업데이트 (저장소 최신본 받기)</h3>
+  <div class="code">
+    <span class="lang-label">Bash</span>
+    <span class="comment"># 1. 프로젝트 폴더로 이동</span><br>
+    <span class="prompt">$</span> cd Claude_Study<br><br>
+    <span class="comment"># 2. 원격 저장소 변경사항 확인</span><br>
+    <span class="prompt">$</span> git fetch origin<br><br>
+    <span class="comment"># 3. 현재 브랜치에 최신 코드 병합</span><br>
+    <span class="prompt">$</span> git pull origin main<br><br>
+    <span class="comment"># 개발 브랜치를 사용 중이라면</span><br>
+    <span class="prompt">$</span> git pull origin claude/kind-gates-8OAQw
+  </div>
+
+  <h3>크롬 확장프로그램 갱신</h3>
+  <p>코드가 업데이트된 후 크롬에서 아래 단계로 확장프로그램을 갱신합니다.</p>
+  <ol class="step-list">
+    <li data-num="1">크롬 주소창에 <code>chrome://extensions/</code> 입력</li>
+    <li data-num="2">Resume Analyzer 카드에서 <strong>"새로고침(↺)"</strong> 버튼 클릭</li>
+    <li data-num="3">버전 번호가 변경되었는지 확인 (manifest.json의 <code>"version"</code> 값)</li>
+    <li data-num="4">열려 있는 사이드패널이 있다면 닫았다가 다시 열기</li>
+  </ol>
+
+  <div class="info-box info-ok">
+    <span class="ib-icon">✅</span>
+    <div class="ib-content">
+      <strong>로컬 설정(API 키, Sheets ID)은 유지됩니다.</strong>
+      설정값은 <code>chrome.storage.local</code>에 저장되어 확장프로그램을 새로고침해도 초기화되지 않습니다.
+    </div>
+  </div>
+
+  <h3>코드 수정 후 저장소에 반영하기</h3>
+  <p>직접 코드를 수정하고 저장소에 올려야 할 경우 아래 절차를 따릅니다.</p>
+  <div class="code">
+    <span class="lang-label">Bash</span>
+    <span class="comment"># 1. 변경 파일 확인</span><br>
+    <span class="prompt">$</span> git status<br><br>
+    <span class="comment"># 2. 변경 내용 확인</span><br>
+    <span class="prompt">$</span> git diff<br><br>
+    <span class="comment"># 3. 수정 파일 스테이징 (예: popup.js만 추가)</span><br>
+    <span class="prompt">$</span> git add resume-analyzer-extension/popup/popup.js<br><br>
+    <span class="comment"># 4. 커밋 (변경 이유를 명확히 작성)</span><br>
+    <span class="prompt">$</span> git commit -m <span class="string">"fix: 스크롤 캡처 시 좌표 계산 오류 수정"</span><br><br>
+    <span class="comment"># 5. 원격 저장소에 푸시</span><br>
+    <span class="prompt">$</span> git push -u origin claude/kind-gates-8OAQw
+  </div>
+
+  <h3>자주 사용하는 Git 명령어 요약</h3>
+  <table>
+    <tr><th>명령어</th><th>설명</th></tr>
+    <tr>
+      <td class="td-mono">git status</td>
+      <td>변경된 파일 목록 확인</td>
+    </tr>
+    <tr>
+      <td class="td-mono">git diff</td>
+      <td>변경 내용(코드 비교) 상세 확인</td>
+    </tr>
+    <tr>
+      <td class="td-mono">git log --oneline -10</td>
+      <td>최근 10개 커밋 히스토리 확인</td>
+    </tr>
+    <tr>
+      <td class="td-mono">git pull origin main</td>
+      <td>원격의 최신 코드를 로컬에 반영</td>
+    </tr>
+    <tr>
+      <td class="td-mono">git stash</td>
+      <td>작업 중인 변경사항을 임시 보관 (pull 전 충돌 방지)</td>
+    </tr>
+    <tr>
+      <td class="td-mono">git stash pop</td>
+      <td>임시 보관한 변경사항 다시 적용</td>
+    </tr>
+    <tr>
+      <td class="td-mono">git checkout -b feature/xxx</td>
+      <td>새 기능 브랜치 생성</td>
+    </tr>
+  </table>
+
+  <div class="info-box info-danger">
+    <span class="ib-icon">🚨</span>
+    <div class="ib-content">
+      <strong>주의: git reset --hard, git push --force 사용 자제</strong>
+      이 명령어들은 커밋 기록을 덮어쓰거나 삭제할 수 있습니다. 확실한 이유 없이는 사용하지 마세요.
+    </div>
+  </div>
+
+  <h3>업데이트 후 문제가 생겼을 때 (롤백)</h3>
+  <div class="code">
+    <span class="lang-label">Bash</span>
+    <span class="comment"># 직전 커밋 상태로 되돌리기 (변경사항 유지)</span><br>
+    <span class="prompt">$</span> git revert HEAD<br><br>
+    <span class="comment"># 특정 커밋으로 파일만 복원 (커밋 기록 유지)</span><br>
+    <span class="prompt">$</span> git checkout abc1234 -- resume-analyzer-extension/popup/popup.js<br><br>
+    <span class="comment"># 커밋 해시 확인</span><br>
+    <span class="prompt">$</span> git log --oneline
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ FOOTER ═══════════════════════════════════ -->
+<footer>
+  <hr style="border:none;border-top:1px solid var(--gray-200);margin-bottom:20px;">
+  <p>Resume Analyzer Extension · v1.2.0 · Chrome Extension Manifest V3</p>
+  <p style="margin-top:6px;color:var(--gray-300);">com2us-recruit/Claude_Study · 가이드 생성일: 2026-05-27</p>
+</footer>
+
+</body>
+</html>
